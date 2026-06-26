@@ -6,13 +6,10 @@
     "email": "info@jabaltorres.com"
   },
   "description": "Stack-agnostic web development workflow skills for Claude Code — a portable branch → plan → test → commit → PR → review pipeline.",
-  "metadata": {
-    "pluginRoot": "./plugins"
-  },
   "plugins": [
     {
       "name": "webdev",
-      "source": "webdev",
+      "source": "./plugins/webdev",
       "description": "Portable web dev workflow that auto-detects your stack (JS/TS, PHP, Python). Branch, plan, test, commit, open and review PRs — beginner-safe defaults, power-user overrides via .claude/webdev.json."
     }
   ]
