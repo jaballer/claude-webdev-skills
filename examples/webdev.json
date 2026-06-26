@@ -1,0 +1,15 @@
+{
+  "_comment": "Drop this at .claude/webdev.json in any project to pin commands explicitly. Any key here overrides auto-detection. Delete keys you want detected automatically. This example mirrors a KrateCMS-style DDEV + Laravel setup.",
+
+  "packageManager": "composer",
+  "commandPrefix": "ddev exec",
+
+  "install": "ddev composer install",
+  "test":    "ddev exec ./vendor/bin/phpunit",
+  "format":  "ddev exec ./vendor/bin/pint",
+  "lint":    "ddev exec ./vendor/bin/pint --test",
+  "dev":     "ddev start",
+  "build":   "ddev exec npm run build",
+
+  "branchPrefixes": ["feature", "fix", "refactor", "docs", "chore", "review"]
+}

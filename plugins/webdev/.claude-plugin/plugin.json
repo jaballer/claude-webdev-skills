@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "webdev",
+  "displayName": "Web Dev Workflow",
+  "version": "0.1.0",
+  "description": "A stack-agnostic web development workflow for Claude Code. Auto-detects your package manager, test runner, and formatter, then drives a consistent branch → plan → test → commit → PR → review pipeline across any project. Works zero-config on standard setups; pin commands via .claude/webdev.json for custom stacks.",
+  "author": {
+    "name": "Jabal Torres",
+    "email": "info@jabaltorres.com",
+    "url": "https://jabaltorres.com"
+  },
+  "homepage": "https://github.com/jaballer/claude-webdev-skills",
+  "repository": "https://github.com/jaballer/claude-webdev-skills",
+  "license": "MIT",
+  "keywords": [
+    "workflow",
+    "git",
+    "pull-request",
+    "testing",
+    "stack-detection",
+    "vibecoding",
+    "web-development"
+  ]
+}
