@@ -44,20 +44,24 @@ Claude will also invoke them automatically based on what you ask for.
 }
 ```
 
-## Skills (v0.1.0)
+## Skills (v0.2.0)
 
 | Skill | What it does |
 |---|---|
 | `/webdev:detect-stack` | Foundation — resolves package manager, test/format/lint/dev commands, framework. Other skills call this first. |
 | `/webdev:run-tests` | Runs tests at the smallest scope that proves the change; full suite only when the change fans out. |
+| `/webdev:new-branch` | Creates a properly-named branch off the up-to-date default branch (auto-detected). |
+| `/webdev:sync-main` | Returns the repo to a clean default branch after a merge; prunes refs and (with confirmation) deletes merged branches. |
+| `/webdev:commit` | Tests, formats, runs a hostile pre-push self-review + web security checklist, writes a conventional commit, pushes, opens a PR. |
+| `/webdev:open-pr` | Opens a PR with a four-section reviewable body (Summary / Decisions baked in / Test plan / Follow-ups). |
 
-> Roadmap below. This is an early scaffold — the workflow skills (`new-branch`, `commit`,
-> `open-pr`, `review-pr`, `plan-inventory`, `new-feature`) and the beginner on-ramp skills
-> are being ported next.
+> The `commit` self-review supports a **project extension hook**: drop a `.claude/bug-classes.md`
+> (or a `## Bug classes` section in your `CLAUDE.md`) and the review folds your codebase-specific
+> checks in on top of the generic web security set.
 
 ## Roadmap
 
-- **Core workflow:** `new-branch`, `sync-main`, `commit`, `open-pr`, `review-pr`, `plan-inventory`, `new-feature` (orchestrator)
+- **Core workflow (remaining):** `plan-inventory`, `review-pr`, `new-feature` (orchestrator)
 - **Quality:** `qa-review`, `post-merge-review`
 - **Beginner / vibecoder on-ramp:** `setup` (scaffold CLAUDE.md + webdev.json), `explain-codebase`, `safe-edit` (guardrails), `ship-it` (guided happy path)
 
