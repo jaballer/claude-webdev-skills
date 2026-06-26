@@ -44,7 +44,9 @@ Claude will also invoke them automatically based on what you ask for.
 }
 ```
 
-## Skills (v0.3.0)
+## Skills (v0.4.0)
+
+**Build loop**
 
 | Skill | What it does |
 |---|---|
@@ -57,13 +59,20 @@ Claude will also invoke them automatically based on what you ask for.
 | `/webdev:commit` | Tests, formats, runs a hostile pre-push self-review + web security checklist, writes a conventional commit, pushes, opens a PR. |
 | `/webdev:open-pr` | Opens a PR with a four-section reviewable body (Summary / Decisions baked in / Test plan / Follow-ups). |
 
+**Review loop**
+
+| Skill | What it does |
+|---|---|
+| `/webdev:review-pr` | Addresses PR review comments (any bot or human) end to end: verify → sweep → fix → test → commit → reply → resolve threads → wait-and-recheck. Silence ≠ approval. |
+| `/webdev:post-merge-review` | Deep-dive review of a single merged PR — completeness, tests, security, docs, with a verdict. |
+| `/webdev:qa-review` | Broad audit of all recently merged work on a `review/` branch, with parallel sub-agents and a blocker summary. |
+
 > **Two project extension hooks** let a repo layer its own knowledge on top without forking a
 > skill: `commit`'s self-review reads `.claude/bug-classes.md` (codebase-specific bug classes),
 > and `plan-inventory` references any existing architecture/feature doc as the surface checklist.
 
 ## Roadmap
 
-- **Review loop:** `review-pr` (address PR comments incl. bots), `qa-review`, `post-merge-review`
 - **Beginner / vibecoder on-ramp:** `setup` (scaffold CLAUDE.md + webdev.json), `explain-codebase`, `safe-edit` (guardrails), `ship-it` (guided happy path)
 
 ## Conventions (house style)
