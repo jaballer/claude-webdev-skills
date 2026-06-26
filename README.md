@@ -44,25 +44,26 @@ Claude will also invoke them automatically based on what you ask for.
 }
 ```
 
-## Skills (v0.2.0)
+## Skills (v0.3.0)
 
 | Skill | What it does |
 |---|---|
+| `/webdev:new-feature` | **Orchestrator** — drives a whole change: branch → inventory → implement → test → commit → PR by chaining the skills below. |
 | `/webdev:detect-stack` | Foundation — resolves package manager, test/format/lint/dev commands, framework. Other skills call this first. |
+| `/webdev:plan-inventory` | Pre-implementation audit: 7 artifacts (references, execution-context, shared infra, sibling consistency, output pipeline, docs, value-shape) surfaced for approval *before* code. |
 | `/webdev:run-tests` | Runs tests at the smallest scope that proves the change; full suite only when the change fans out. |
 | `/webdev:new-branch` | Creates a properly-named branch off the up-to-date default branch (auto-detected). |
 | `/webdev:sync-main` | Returns the repo to a clean default branch after a merge; prunes refs and (with confirmation) deletes merged branches. |
 | `/webdev:commit` | Tests, formats, runs a hostile pre-push self-review + web security checklist, writes a conventional commit, pushes, opens a PR. |
 | `/webdev:open-pr` | Opens a PR with a four-section reviewable body (Summary / Decisions baked in / Test plan / Follow-ups). |
 
-> The `commit` self-review supports a **project extension hook**: drop a `.claude/bug-classes.md`
-> (or a `## Bug classes` section in your `CLAUDE.md`) and the review folds your codebase-specific
-> checks in on top of the generic web security set.
+> **Two project extension hooks** let a repo layer its own knowledge on top without forking a
+> skill: `commit`'s self-review reads `.claude/bug-classes.md` (codebase-specific bug classes),
+> and `plan-inventory` references any existing architecture/feature doc as the surface checklist.
 
 ## Roadmap
 
-- **Core workflow (remaining):** `plan-inventory`, `review-pr`, `new-feature` (orchestrator)
-- **Quality:** `qa-review`, `post-merge-review`
+- **Review loop:** `review-pr` (address PR comments incl. bots), `qa-review`, `post-merge-review`
 - **Beginner / vibecoder on-ramp:** `setup` (scaffold CLAUDE.md + webdev.json), `explain-codebase`, `safe-edit` (guardrails), `ship-it` (guided happy path)
 
 ## Conventions (house style)
