@@ -44,7 +44,16 @@ Claude will also invoke them automatically based on what you ask for.
 }
 ```
 
-## Skills (v0.4.0)
+## Skills (v1.0.0)
+
+**Getting started**
+
+| Skill | What it does |
+|---|---|
+| `/webdev:setup` | First-run setup — detects the stack, scaffolds `CLAUDE.md` + an optional `.claude/webdev.json`, explains what it configured. Never overwrites without asking. |
+| `/webdev:explain-codebase` | Read-only tour of an unfamiliar project: what it is, the stack, layout, entry points, how to run it, where to start reading. |
+| `/webdev:ship-it` | The guided, beginner-friendly path from idea to merged PR — same workflow as `new-feature`, but explains each step and confirms before anything irreversible. |
+| `/webdev:safe-edit` | Guardrails — classify an operation's reversibility and blast radius, then proceed / confirm / back-up-first. The common footguns, spelled out. |
 
 **Build loop**
 
@@ -71,9 +80,18 @@ Claude will also invoke them automatically based on what you ask for.
 > skill: `commit`'s self-review reads `.claude/bug-classes.md` (codebase-specific bug classes),
 > and `plan-inventory` references any existing architecture/feature doc as the surface checklist.
 
+## New to this? Start here
+
+```text
+/webdev:setup            # configure the project (once)
+/webdev:explain-codebase # get oriented if the code is unfamiliar
+/webdev:ship-it          # make your first change, guided end to end
+```
+
 ## Roadmap
 
-- **Beginner / vibecoder on-ramp:** `setup` (scaffold CLAUDE.md + webdev.json), `explain-codebase`, `safe-edit` (guardrails), `ship-it` (guided happy path)
+The core is complete (v1.0.0). Possible future additions: optional integrations
+(e.g. a Sentry-issue-fix skill), and a `compare`/changelog skill for release notes.
 
 ## Conventions (house style)
 
