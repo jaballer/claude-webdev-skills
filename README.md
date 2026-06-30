@@ -18,10 +18,23 @@ a detection layer.
 
 ## Install
 
-```text
-/plugin marketplace add jaballer/claude-webdev-skills
-/plugin install webdev@webdev-skills
-```
+Two separate steps — run each at Claude Code's main `/` prompt, one at a time:
+
+1. **Add the marketplace.** Enter just the `owner/repo` when prompted for a source:
+
+   ```text
+   /plugin marketplace add jaballer/claude-webdev-skills
+   ```
+
+2. **Install the plugin** from that marketplace:
+
+   ```text
+   /plugin install webdev@webdev-skills
+   ```
+
+> Don't paste both lines together. The first command opens an "Add Marketplace"
+> dialog whose source field expects only `jaballer/claude-webdev-skills` — pasting the
+> `/plugin install …` line into it produces an "is not a valid GitHub owner/repo" error.
 
 Skills are then available namespaced as `/webdev:<name>` (e.g. `/webdev:run-tests`), and
 Claude will also invoke them automatically based on what you ask for.
