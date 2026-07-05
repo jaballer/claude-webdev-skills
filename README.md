@@ -65,7 +65,7 @@ Claude will also invoke them automatically based on what you ask for.
 | `commandPrefix` | all command-running skills | Prepended to **detected** commands only (e.g. `ddev exec`); pinned commands are used verbatim — write them complete, prefix included |
 | `migrationStatus` | `qa-review` | Migration-status command, if the stack has one |
 | `defaultBranch` | `new-branch`, `sync-main`, `open-pr` | Overrides origin/HEAD detection |
-| `branchPrefixes` | `new-branch` | Allowed branch name prefixes |
+| `branchPrefixes` | `new-branch`, `fix-bug` | Allowed branch name prefixes |
 | `coAuthorTrailer` | `commit`, `review-pr` | **Default `false`.** Opt in to an AI co-author commit trailer |
 | `prFooter` | `open-pr` | **Default `false`.** Opt in to a "Generated with Claude Code" PR footer |
 
