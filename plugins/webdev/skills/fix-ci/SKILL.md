@@ -117,7 +117,10 @@ fix actually is (`fix:`, `test:`, `chore(deps):`, `ci:` for workflow-file change
 
 Re-check the same workflow/job from Step 1. With a PR: `gh pr checks <number> --watch`.
 Branch-only (no PR number): find the run for the pushed commit —
-`gh run list --branch <branch> --commit $(git rev-parse HEAD)` — then `gh run watch <run-id>`.
+`gh run list --branch <branch> --commit $(git rev-parse HEAD)` — then
+`gh run watch <run-id> --exit-status`. The `--exit-status` matters: without it `gh run watch`
+exits 0 even when the run fails, and "the command succeeded" gets misread as green. If in doubt,
+confirm the conclusion explicitly: `gh run view <run-id> --json conclusion`.
 Either way, waiting ~3 min via `ScheduleWakeup` and re-checking also works — don't busy-poll.
 
 - **Green** → done.
