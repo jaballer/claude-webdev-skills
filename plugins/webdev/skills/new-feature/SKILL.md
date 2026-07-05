@@ -84,6 +84,7 @@ classes you've defined in `.claude/bug-classes.md`.
   ├── /webdev:new-branch         (and /webdev:sync-main first, if needed)
   ├── /webdev:plan-inventory     (non-trivial work only — per triggers)
   ├── /webdev:run-tests          (scoped; full for foundational)
+  ├── /webdev:verify             (user-facing changes only)
   └── /webdev:commit
         └── /webdev:open-pr
 ```

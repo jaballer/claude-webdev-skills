@@ -123,6 +123,7 @@ bug-fix PR reviewable in one pass.
   ├── /webdev:new-branch        (project's bug-fix prefix — fix/ default, per branchPrefixes)
   ├── /webdev:plan-inventory    (only if the root cause trips its triggers)
   ├── /webdev:run-tests         (new test red → green, then blast radius)
+  ├── /webdev:verify            (user-facing bugs — re-drive the repro, observed)
   └── /webdev:commit
         └── /webdev:open-pr
 ```
