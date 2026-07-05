@@ -99,7 +99,9 @@ project runner, since bare `manage.py` or a global `prisma` fails outside an act
 `workspaces` field in the root `package.json` is present, commands are per-package, not global.
 Resolve the profile for the package containing the files in scope (nearest `package.json` up the
 tree); if the scope is unclear, list the workspace packages and ask which one applies. Prefer the
-repo's task runner (`turbo run test`, `nx test <project>`, `pnpm --filter <pkg> test`) over `cd`.
+repo's task runner over `cd` — via the manager's exec form, since `turbo`/`nx` are usually
+devDependencies not on PATH: `pnpm exec turbo run test`, `npm exec nx -- test <project>`,
+`pnpm --filter <pkg> test`.
 
 ### 3. When detection is ambiguous
 
