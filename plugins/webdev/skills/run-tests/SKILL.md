@@ -12,7 +12,8 @@ description: >
 
 Stack-agnostic. **Resolve the test command through `/webdev:detect-stack`** (which honors
 `.claude/webdev.json` first, then detection) — never assume `npm test` or `phpunit`. Apply
-the project's `commandPrefix` if one is set (e.g. `ddev exec`).
+the project's `commandPrefix` to a **detected** command (e.g. `ddev exec`); a command pinned
+in `webdev.json` is already complete — use it verbatim.
 
 ## Decision Logic — default to the smallest run that proves the change
 

@@ -39,8 +39,9 @@ up-to-date default branch.
    ```
    If non-empty, say what's there and ask: **carry it onto the new branch** (fine when the
    work-in-progress belongs to the new task — git carries it through the checkouts unless files
-   conflict), or **stash first** (`git stash push`, pop after branching). Never stash or discard
-   without asking.
+   conflict), or **stash first** (`git stash push -u`, pop after branching — the `-u` matters:
+   plain `git stash push` leaves untracked `??` files in the tree, so they'd still block the
+   checkout or ride along despite the stash). Never stash or discard without asking.
 
    ```bash
    git checkout <base> && git pull --ff-only

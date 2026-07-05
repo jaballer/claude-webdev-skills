@@ -55,9 +55,10 @@ full enumeration below is more ceremony than the change warrants. Fast path inst
 2. Grep any name/reference the change touches for stale siblings.
 3. Confirm no secrets or debug leftovers made it in.
 
-Everything else gets the full 4a + 4b read. This is the same threshold `/webdev:review-pr` step 8
-uses (>~5 lines, >1 file, or introducing a flag/rule/enum → full read). **When unsure, do the full
-read** — the threshold exists to spare one-line fixes, not to dodge scrutiny.
+Everything else gets the **full read: 4a + 4b + 4c (project bug classes) + 4d** — tiering never
+drops a project's own checks. This is the same threshold `/webdev:review-pr` step 8 uses.
+**When unsure, do the full read** — the threshold exists to spare one-line fixes, not to dodge
+scrutiny.
 
 ### 4a. The hostile-read rules (stack-agnostic)
 
@@ -185,4 +186,4 @@ Skip only if the user said "commit but don't PR" or it's a trivial typo/comment 
 When complete, report back:
 - **Branch** · **Commit SHA** (short) · **PR URL** (if created)
 - **Test result**: pass/fail summary and scope
-- **Self-review**: tier used (`fast-path` or `full`) + confirmation 4a/4b were enumerated when full (note anything found + fixed)
+- **Self-review**: tier used (`fast-path` or `full`) + confirmation 4a–4d were enumerated when full (note anything found + fixed)
