@@ -28,8 +28,13 @@ Green is a consequence of correct code, not the goal itself. Never:
 
 **Fix where the failure lives.** With a PR: check out its head first — `gh pr checkout <number>`
 (already on it? still sync: `git fetch && git pull --ff-only`). Skipping this means Step 5's fix
-lands on whatever branch happens to be checked out while the red PR never changes. Without a PR:
-confirm `git branch --show-current` is the branch whose CI is red.
+lands on whatever branch happens to be checked out while the red PR never changes. On a **fork
+(cross-repository) PR**, `gh pr checkout` wires pushes to the contributor's fork — that needs
+fork access or maintainer-edit permission; lacking it, stop and report rather than pushing
+anywhere else. Without a PR: confirm `git branch --show-current` is the branch whose CI is red —
+and if that red branch is the **default branch** (e.g. a post-merge deploy failure handed over
+from `/webdev:merge-pr`), don't fix on it: **invoke `/webdev:new-branch`** (`fix/` prefix) first;
+the fix still lands through a PR.
 
 Then locate the failure: `gh pr checks <number>` (add `--repo <owner>/<repo>` if needed), or
 branch-only: `gh run list --branch <branch> --limit 5`.
@@ -110,8 +115,10 @@ the user's time.
 
 ## Step 6: Commit and push
 
-**Invoke `/webdev:commit`** — the PR already exists, so skip its open-pr step. Use the type the
-fix actually is (`fix:`, `test:`, `chore(deps):`, `ci:` for workflow-file changes).
+**Invoke `/webdev:commit`**. If a PR already exists, skip its open-pr step; on the branch-only
+path there is no PR — ask whether to open one now (usually yes, so the fix and its CI status land
+somewhere reviewable). Use the type the fix actually is (`fix:`, `test:`, `chore(deps):`, `ci:`
+for workflow-file changes).
 
 ## Step 7: Watch the checks — and react to what comes back
 
