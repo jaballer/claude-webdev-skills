@@ -18,11 +18,13 @@ up-to-date default branch.
 ## Steps
 
 1. **Resolve the default branch** (don't assume `main`)
-   ```bash
-   git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@'
-   ```
-   Falls back to `main` then `master` if origin/HEAD isn't set. A project can pin
-   `"defaultBranch"` in `.claude/webdev.json` to override. Call the result `<base>` below.
+
+   Precedence, highest first — an explicit pin always beats detection:
+   1. `"defaultBranch"` in `.claude/webdev.json` (a repo pinning `develop`/`release` means it)
+   2. `git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@'`
+   3. `main`, then `master`
+
+   Call the result `<base>` below.
 
 2. **Check the current branch**
    ```bash
