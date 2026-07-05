@@ -25,8 +25,9 @@ information rather than shipping a speculative patch.
 
 ## 0. Branch first
 
-**Invoke `/webdev:new-branch`** with a `fix/` prefix (issue number in the name when there is
-one, e.g. `fix/412-avatar-upload-500`).
+**Invoke `/webdev:new-branch`** with the project's bug-fix prefix — `fix/` by default, but honor
+a `branchPrefixes` override in `.claude/webdev.json` (a project using `bugfix/` or `bug/` means
+that one). Issue number in the name when there is one, e.g. `fix/412-avatar-upload-500`.
 
 ## 1. Pin down the report
 
@@ -130,8 +131,22 @@ bug-fix PR reviewable in one pass.
 
 ## Output
 
-- **Bug**: expected vs actual (one line) · **Reproduced**: how (or "not reproduced — speculative, user-approved")
+Two valid terminal shapes — a no-patch investigation is a legitimate end state, not a failure
+to force a PR out of:
+
+**Fixed** (reproduced, or speculative with explicit user approval):
+- **Bug**: expected vs actual (one line) · **Reproduced**: how (or "not reproduced —
+  speculative fix, user-approved, labeled in the PR")
 - **Root cause**: one sentence, with file:line
-- **Test**: name + location, confirmed red → green
+- **Proof**: test name + location, confirmed red → green — or, where the harness can't reach
+  the bug (visual/third-party per Step 4), "manual verification: <what was re-driven and
+  observed>" stated as such
 - **Siblings**: fixed in-commit / follow-ups filed / none found (state which)
 - **Test result**: scope + pass/fail · **Branch** · **Commit SHA** · **PR URL**
+
+**Investigated, no patch** (could not reproduce; user did not approve a speculative fix):
+- **Bug**: expected vs actual (one line)
+- **Attempted**: repro routes tried, contexts checked (role, data state, flags, env)
+- **Hypotheses**: ranked, with what evidence would confirm each
+- **Needed to proceed**: the specific detail(s) that would pin it down
+- No commit / no PR — nothing shipped, by design.

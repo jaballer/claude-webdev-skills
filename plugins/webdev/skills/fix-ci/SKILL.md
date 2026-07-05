@@ -24,14 +24,28 @@ Green is a consequence of correct code, not the goal itself. Never:
 - edit the workflow to remove or soften the failing step
 - push empty commits or spam reruns hoping for a different answer
 
-## Step 1: Locate the failing run
+## Step 1: Get onto the failing branch, then locate the run
 
-With a PR: `gh pr checks <number>` (add `--repo <owner>/<repo>` if needed). Without one:
-`gh run list --branch $(git branch --show-current) --limit 5`. Then pull only the failure:
+**Fix where the failure lives.** With a PR: check out its head first — `gh pr checkout <number>`
+(already on it? still sync: `git fetch && git pull --ff-only`). Skipping this means Step 5's fix
+lands on whatever branch happens to be checked out while the red PR never changes. Without a PR:
+confirm `git branch --show-current` is the branch whose CI is red.
+
+Then locate the failure: `gh pr checks <number>` (add `--repo <owner>/<repo>` if needed), or
+branch-only: `gh run list --branch <branch> --limit 5`.
+
+`gh pr checks` **does not expose a run id** — for a GitHub Actions check, derive it from the
+check's `link` field (`gh pr checks <number> --json name,state,link` — the `/actions/runs/<id>/`
+path segment) or by head SHA: `gh run list --commit $(git rev-parse HEAD)`. Then pull only the
+failure:
 ```bash
 gh run view <run-id> --log-failed
 ```
-Note the workflow, job, and step that failed — you'll re-check exactly these later.
+An **external/status check** (a provider posting a status — no Actions run exists) has no run id
+at all: follow the check's `link` to the provider's page for the failure detail instead.
+
+Note the workflow, job, and step that failed, and **keep the run id / check name** — the recheck
+in Step 7 re-checks exactly these.
 
 ## Step 2: Find the first real error
 
@@ -57,8 +71,11 @@ type; it determines the fix path:
   ```bash
   gh run list --branch <base> --workflow "<workflow-name>" --limit 3
   ```
-  If base is red on the same check, this branch didn't break it. **Don't fold a base fix into this
-  PR** — report it, and offer a separate `fix/` branch off base (via `/webdev:new-branch`).
+  Base being red on the same check is necessary but **not sufficient** — read the base run's
+  failed logs too (`gh run view <base-run-id> --log-failed`) and compare root causes. Same error
+  at the same step → pre-existing; base red for a *different* reason does not clear this branch's
+  failure. For a genuine pre-existing failure, **don't fold a base fix into this PR** — report it,
+  and offer a separate `fix/` branch off base (via `/webdev:new-branch`).
 - **Flake / infra** — matches the infra row above and doesn't reference project code. **One**
   rerun is allowed: `gh run rerun <run-id> --failed`. If the same failure repeats, it's real —
   reclassify and stop calling it a flake.
@@ -81,9 +98,15 @@ Run the local equivalent of the failing step (resolved test/lint/typecheck/build
 
 ## Step 5: Fix and verify locally
 
-Apply the fix at the cause. Then **invoke `/webdev:run-tests`** at the fix's blast radius (for a
-lint/typecheck/build failure, re-run that resolved command instead). Must be green locally —
-CI is not your test runner; every guess-push costs a full CI cycle of the user's time.
+Apply the fix at the cause. Then verify with the check that actually failed:
+- **Test failure** → **invoke `/webdev:run-tests`** at the fix's blast radius.
+- **Lint / typecheck / build failure** → re-run that resolved command.
+- **Install / dependency failure** → re-run the **exact install command with CI's flags**
+  (`npm ci`, `pnpm install --frozen-lockfile`, …) — tests passing against an already-populated
+  local dependency tree prove nothing about a fresh CI install.
+
+Must be green locally — CI is not your test runner; every guess-push costs a full CI cycle of
+the user's time.
 
 ## Step 6: Commit and push
 
@@ -92,8 +115,10 @@ fix actually is (`fix:`, `test:`, `chore(deps):`, `ci:` for workflow-file change
 
 ## Step 7: Watch the checks — and react to what comes back
 
-Re-check the same workflow/job from Step 1: `gh pr checks <number> --watch` (or wait ~3 min via
-`ScheduleWakeup` and re-check — don't busy-poll).
+Re-check the same workflow/job from Step 1. With a PR: `gh pr checks <number> --watch`.
+Branch-only (no PR number): find the run for the pushed commit —
+`gh run list --branch <branch> --commit $(git rev-parse HEAD)` — then `gh run watch <run-id>`.
+Either way, waiting ~3 min via `ScheduleWakeup` and re-checking also works — don't busy-poll.
 
 - **Green** → done.
 - **Same failure** → the fix didn't address the cause. Back to Step 2 with the fresh logs —
