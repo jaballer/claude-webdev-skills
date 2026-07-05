@@ -19,12 +19,15 @@ resolving inline on GitHub. Resolve project commands via `/webdev:detect-stack`.
 
 Every commit that addresses a review comment MUST be paired with:
 1. A **reply** on that comment including the new commit SHA and a one-line explanation
-2. A **resolution** of the conversation thread (`resolveReviewThread` GraphQL mutation)
+2. For **inline** comments: a **resolution** of the review thread (`resolveReviewThread`
+   GraphQL mutation). General (PR-level) comments have no thread to resolve — a reply alone
+   closes them. Rebuttal threads stay open for the reviewer (Step 11).
 
 If the repo enforces "all conversations resolved" branch protection, an un-replied/un-resolved
 fix leaves the PR un-mergeable. Even when it doesn't, resolving keeps the thread tidy. **Don't
-declare this skill complete until every addressed comment has a reply and its thread is
-resolved.** "Pushed but not replied" and "replied but not resolved" are half-done states.
+declare this skill complete until every addressed comment has a reply, and every addressed
+inline comment's thread is resolved (rebuttals excepted).** "Pushed but not replied" and
+"replied but not resolved" are half-done states.
 
 ## Step 1: Parse the PR URL
 Extract `owner`, `repo`, `pr_number`. Sources in priority order: (1) explicit paste, (2) chained
@@ -38,12 +41,18 @@ git branch --show-current
 If it doesn't match the PR head ref: `gh pr checkout <pr_number> --repo <owner>/<repo>`.
 If it does match, still sync: `git fetch origin && git status -sb`, then `git pull --ff-only`.
 If `--ff-only` refuses, stop and surface it — don't auto-rebase.
+**Fork PRs:** if `gh pr view --json isCrossRepository` is true, pushes go to the contributor's
+fork — `gh pr checkout` configures that automatically, but it only works with fork access or
+maintainer-edit permission. Lacking either, stop and report; never push the fix to upstream.
 
 ## Step 3: Fetch all comments + build a tracking list
 ```bash
-gh api repos/<owner>/<repo>/pulls/<pr_number>/comments   # inline (line-level)
-gh api repos/<owner>/<repo>/issues/<pr_number>/comments  # general (PR-level)
+gh api --paginate repos/<owner>/<repo>/pulls/<pr_number>/comments   # inline (line-level)
+gh api --paginate repos/<owner>/<repo>/issues/<pr_number>/comments  # general (PR-level)
 ```
+`--paginate` is load-bearing: `gh api` returns 30 items per page, and a big bot review easily
+exceeds that — an unpaginated fetch silently drops every comment past page 1 from the tracking
+list.
 For each, note `id`, `path`, `line`, `body`, `diff_hunk`. **Build a tracking list of every comment
 ID you intend to address** — you iterate this exact list in Step 10 (reply) and Step 11 (resolve).
 Nothing comes off it until both are posted. Skip purely informational comments (bot intros, reactions).
@@ -66,7 +75,10 @@ codebase's conventions** (read `CLAUDE.md` if present). Work through all fixes b
 
 ## Step 7: Run tests
 **Invoke `/webdev:run-tests`** scoped to the fix's blast radius (full only if it touched shared code
-or a targeted run surprised you). A docs-only fix needs no run. Don't commit broken code. If there
+or a targeted run surprised you). A docs-only fix needs no run. Don't commit broken code.
+**Run the resolved formatter/linter on the changed files too** — this path commits directly
+(Step 9) without `/webdev:commit`'s step 3, and unformatted review fixes get re-flagged by
+CI/bots on the next round, burning the recheck budget. If there
 were frontend changes, note the user may need to run the dev/build command to see them.
 
 ## Step 8: Pre-push self-review
@@ -74,7 +86,7 @@ Read the full diff cold (`git diff`). For small fixes, check: new contradictions
 fix? stale references / "see step N" pointers? examples that no longer match the changed rule? did
 the sweep go wide enough (re-grep the original anti-pattern AND any new pattern introduced)?
 
-**For non-trivial fix commits** (>~5 lines, >1 file, introducing a flag/rule/enum/route, touching
+**For non-trivial fix commits** (>~5 lines, >1 file, introducing a flag/config key/rule/enum/route, touching
 renames/deletions, or handling user input or queries — the same trivial-diff boundary as
 `/webdev:commit` step 4), the bullets aren't enough — apply the full hostile read from
 **`/webdev:commit` step 4** (4a rules 1–9, the 4b web-security checklist, 4c project bug-classes,
@@ -88,7 +100,9 @@ fix(pr-<number>): address review comments
 
 - <brief description of each fix>
 ```
-Then `git push`. (Honor `coAuthorTrailer` in `.claude/webdev.json` as in `/webdev:commit`.)
+Then plain `git push` — no remote/refspec override, so git uses the pushRemote `gh pr checkout`
+configured (on a fork PR that's the contributor's repo — see Step 2). (Honor `coAuthorTrailer`
+in `.claude/webdev.json` as in `/webdev:commit`.)
 
 ## Step 10: Reply to each comment
 Inline reply:
@@ -130,15 +144,17 @@ now `isResolved:true`.
 Automated reviewers typically react to the new commit in ~2–3 min — often flagging issues the fixes
 themselves introduced. **Default: recheck once before declaring done.**
 1. Capture the push time: `git log -1 --format=%cI HEAD`
-2. Wait ~3 min via `ScheduleWakeup` (`delaySeconds: 180`, prompt re-entering this skill at Step 12).
-   Don't `sleep` — it burns tokens.
+2. Wait ~3 min via `ScheduleWakeup` (`delaySeconds: 180`, prompt re-entering this skill at
+   Step 12) when that tool exists in the environment. Where it doesn't (stock Claude Code
+   installs), one bounded `sleep 180` — or `gh pr checks <pr> --watch` when checks are also
+   pending — is the acceptable fallback; don't loop sleeps.
 3. Re-fetch comments, filtered to those created *after* the push AND **not authored by you** (your
    Step 10 replies will trip the timestamp filter otherwise):
    ```bash
    ME=$(gh api user --jq .login)
    # BSD/macOS date shown; on GNU date use: PUSH_TS=$(date -u -d "$(git log -1 --format=%cI HEAD)" +"%Y-%m-%dT%H:%M:%SZ")
    PUSH_TS=$(date -u -j -f "%Y-%m-%dT%H:%M:%S%z" "$(git log -1 --format=%cI HEAD | sed 's/:\(..\)$/\1/')" +"%Y-%m-%dT%H:%M:%SZ")
-   gh api repos/<owner>/<repo>/pulls/<pr_number>/comments \
+   gh api --paginate repos/<owner>/<repo>/pulls/<pr_number>/comments \
      | jq --arg me "$ME" --arg ts "$PUSH_TS" '[.[]|select((.created_at|fromdateiso8601) > ($ts|fromdateiso8601) and .user.login != $me)]|length'
    ```
    **Pipe through real `jq`** (`gh api --jq` doesn't accept `--arg`). **Compare as numbers via

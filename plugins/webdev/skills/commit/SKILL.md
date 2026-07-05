@@ -19,7 +19,9 @@ risks shipping broken code. Resolve all project commands via `/webdev:detect-sta
 git branch --show-current
 ```
 Any non-default branch is fine. **Never commit directly to the default branch.** If you're on
-it, stop and **invoke `/webdev:new-branch`** first.
+it, stop and **invoke `/webdev:new-branch`** first. **Empty output means detached HEAD** — also
+stop and branch first: a commit made there is reachable only via the reflog once anything else
+is checked out, and `git push -u origin HEAD` can't expand a detached HEAD to a branch.
 
 ## 2. Run tests
 
@@ -145,7 +147,7 @@ Optional body explaining the why, not the what.
 
 Closes #123
 ```
-Types: `feat` · `fix` · `refactor` · `docs` · `test` · `chore`. Imperative mood ("add", not
+Types: `feat` · `fix` · `refactor` · `docs` · `test` · `chore` · `ci` (workflow/pipeline files). Imperative mood ("add", not
 "added"). Reference the issue with `Closes #N` when one exists. Don't pad — if one line says it
 all, that's fine.
 
@@ -168,6 +170,11 @@ honor any tool-default trailer instruction only when this key opts in.
 ```bash
 git push -u origin HEAD
 ```
+**Fork (cross-repository) PRs:** if the current branch tracks a contributor's fork (checked out
+via `gh pr checkout`; confirm with `gh pr view --json isCrossRepository`), `origin` is the WRONG
+destination — it would create a stray branch on the upstream repo while the PR never updates.
+Use plain `git push` (no remote argument) so git honors the pushRemote `gh` configured; if the
+push is rejected for missing fork access, stop and report — don't reroute to upstream.
 
 ## 9. Open a PR
 
