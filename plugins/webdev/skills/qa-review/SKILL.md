@@ -13,9 +13,12 @@ description: >
 Comprehensive audit of recently merged functionality to catch bugs, gaps, inconsistencies, and
 improvement opportunities. Resolve project commands via `/webdev:detect-stack`.
 
-## Step 1: Create a review branch
-**Invoke `/webdev:new-branch`** with a `review/` prefix (e.g. `review/qa-auth-flow`). Don't proceed
-without a confirmed branch.
+## Step 1: Get onto the up-to-date base (no branch yet)
+The audit itself (Steps 2–8) is **read-only** — don't create a branch for it. But it must read
+what's actually merged: **invoke `/webdev:sync-main`** first, which checks the working tree,
+switches to the default branch, and fast-forwards it. Auditing from a stale local base misses
+exactly the recent merges this skill exists to review. A branch is created only in Step 9, and
+only if fixes are actually needed — a clean audit should leave no stray `review/*` branch behind.
 
 ## Step 2: Identify what was recently merged (parallel)
 ```bash
@@ -66,9 +69,13 @@ coverage gaps); **Sub-agent 3** = Steps 5–7 (static analysis, DB, docs). Merge
 - **Summary** — overall: merge-ready for production, or are there blockers?
 
 ## Step 9: Fix or flag
-- **Quick fixes** (typos, imports, style): apply directly on the review branch.
-- **Substantive issues**: describe clearly; let the user decide. After fixes, **invoke
-  `/webdev:run-tests`** (targeted) to confirm nothing broke. Commit via `/webdev:commit`.
+- **Before applying ANY fix** — quick or substantive — **invoke `/webdev:new-branch`** with a
+  `review/` prefix (e.g. `review/qa-auth-flow`). The audit ran on the default branch; edits must not.
+- **Quick fixes** (typos, imports, style): apply on that branch.
+- **Substantive issues**: describe clearly; let the user decide — if they say fix, same branch.
+- After fixes, **invoke `/webdev:run-tests`** (targeted) to confirm nothing broke. Commit via
+  `/webdev:commit`.
+- **No fixes needed**: report and stop — no branch was created, nothing to clean up.
 
 ## Notes
 - This is a review, not a rewrite — don't refactor working code or add features.
