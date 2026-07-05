@@ -32,6 +32,16 @@ up-to-date default branch.
    want a fresh branch anyway, or may be mid-task on existing work.
 
 3. **Switch to base and pull latest (fast-forward only)**
+
+   First check for uncommitted work — don't switch branches over a dirty tree silently:
+   ```bash
+   git status --short
+   ```
+   If non-empty, say what's there and ask: **carry it onto the new branch** (fine when the
+   work-in-progress belongs to the new task — git carries it through the checkouts unless files
+   conflict), or **stash first** (`git stash push`, pop after branching). Never stash or discard
+   without asking.
+
    ```bash
    git checkout <base> && git pull --ff-only
    ```

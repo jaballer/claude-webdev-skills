@@ -99,7 +99,7 @@ Claude will also invoke them automatically based on what you ask for.
 |---|---|
 | `/webdev:review-pr` | Addresses PR review comments (any bot or human) end to end: verify → sweep → fix → test → commit → reply → resolve threads → wait-and-recheck. Silence ≠ approval. |
 | `/webdev:post-merge-review` | Deep-dive review of a single merged PR — completeness, tests, security, docs, with a verdict. |
-| `/webdev:qa-review` | Broad audit of all recently merged work on a `review/` branch, with parallel sub-agents and a blocker summary. |
+| `/webdev:qa-review` | Broad audit of all recently merged work, with parallel sub-agents and a blocker summary; fixes (if any) land on a `review/` branch. |
 
 > **Two project extension hooks** let a repo layer its own knowledge on top without forking a
 > skill: `commit`'s self-review reads `.claude/bug-classes.md` (codebase-specific bug classes),

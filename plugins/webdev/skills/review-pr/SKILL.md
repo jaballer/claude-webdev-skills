@@ -6,7 +6,7 @@ description: >
   "resolve the review", "handle the bot comments", or pastes a PR URL with "fix this
   PR". Handles the full loop: read comments → verify each claim → sweep for siblings
   → fix → test → self-review → commit & push → reply inline → resolve threads → wait
-  and recheck for new comments. Works with any automated reviewer (Codex, Copilot,
+  and recheck for new comments and CI status. Works with any automated reviewer (Codex, Copilot,
   CodeRabbit) and human reviewers alike.
 ---
 
@@ -124,7 +124,7 @@ gh api graphql -f query='
 **Verification:** re-run the threads query; confirm every addressed thread (excluding rebuttals) is
 now `isResolved:true`.
 
-## Step 12: Wait and recheck for new comments
+## Step 12: Wait and recheck — new comments AND CI status
 Automated reviewers typically react to the new commit in ~2–3 min — often flagging issues the fixes
 themselves introduced. **Default: recheck once before declaring done.**
 1. Capture the push time: `git log -1 --format=%cI HEAD`
@@ -142,17 +142,25 @@ themselves introduced. **Default: recheck once before declaring done.**
    **Pipe through real `jq`** (`gh api --jq` doesn't accept `--arg`). **Compare as numbers via
    `fromdateiso8601`** — `%cI` is local-with-offset, GitHub's `created_at` is UTC-Z; a string compare
    mis-orders them.
-4. **New comments exist** → loop back to Step 4 with the same verify→sweep→fix→self-review→push→reply
-   discipline. **Zero new** → done.
+4. **Check CI on the same pass** — review comments aren't the only thing that stalls a PR:
+   ```bash
+   gh pr checks <pr_number> --repo <owner>/<repo>
+   ```
+   A **failing check** on the head SHA: read the failing run (`gh run view <run_id> --log-failed`)
+   and classify — *caused by these commits* → treat it as a finding and loop back like a comment;
+   *pre-existing on base or a known flake* → don't chase it, report it separately for the user.
+   **Pending checks** → note them; they gate the merge-readiness verdict below.
+5. **New comments or a caused-by-us failing check** → loop back to Step 4 with the same
+   verify→sweep→fix→self-review→push→reply discipline. **Zero new and checks green** → done.
 
 **Iteration cap: at most 2 rechecks** (≤3 commits in a row from this skill). If a reviewer is still
 surfacing findings after 3 commits, summarize the remaining comments for human triage instead of
 auto-pushing a 4th.
 
 **Merge-readiness — silence ≠ approval.** The final report distinguishes three states:
-- `merge-ready` — a reviewer posted an explicit positive signal on the latest SHA
-- `under-review` — no signal yet after the recheck wait (NOT approval; the user waits or checks)
-- `findings-open` — new findings (handled by the loop-back)
+- `merge-ready` — a reviewer posted an explicit positive signal on the latest SHA **and** checks are green
+- `under-review` — no reviewer signal yet, or checks still pending (NOT approval; the user waits or checks)
+- `findings-open` — new findings or a caused-by-us failing check (handled by the loop-back)
 
 Never report "ready to merge" from absence of new comments alone. **Skip the recheck** if the user
 said "ship and move on" or the change is trivial.
@@ -165,4 +173,5 @@ complete before tests; self-review before commit; tests pass before commit.
 - **PR**: `owner/repo#number` · **Comments addressed**: count (across iterations)
 - **Commit SHA(s)** · **Test result** · **Replies posted** (must equal comments addressed)
 - **Threads resolved**: count (excludes rebuttals left open) · **Rechecks**: 0/1/2
+- **Checks on last SHA**: green / pending / failing (+ pre-existing/flaky notes)
 - **Reviewer status on last SHA**: `merge-ready` / `under-review` / `findings-open`

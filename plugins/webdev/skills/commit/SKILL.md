@@ -48,6 +48,17 @@ git status
 git diff
 ```
 
+**Scale the review to the diff.** For a **trivial diff** — ≤ ~5 changed lines in one file, no new
+flag/config key/enum/rule/route, no renames or deletions, no user-input or query handling — the
+full enumeration below is more ceremony than the change warrants. Fast path instead:
+1. Re-read the diff cold for typos and logic slips.
+2. Grep any name/reference the change touches for stale siblings.
+3. Confirm no secrets or debug leftovers made it in.
+
+Everything else gets the full 4a + 4b read. This is the same threshold `/webdev:review-pr` step 8
+uses (>~5 lines, >1 file, or introducing a flag/rule/enum → full read). **When unsure, do the full
+read** — the threshold exists to spare one-line fixes, not to dodge scrutiny.
+
 ### 4a. The hostile-read rules (stack-agnostic)
 
 Apply each and **enumerate** the file/function pairs you applied it to. "I checked everything"
@@ -174,4 +185,4 @@ Skip only if the user said "commit but don't PR" or it's a trivial typo/comment 
 When complete, report back:
 - **Branch** · **Commit SHA** (short) · **PR URL** (if created)
 - **Test result**: pass/fail summary and scope
-- **Self-review**: confirmation that 4a/4b were enumerated (note anything found + fixed)
+- **Self-review**: tier used (`fast-path` or `full`) + confirmation 4a/4b were enumerated when full (note anything found + fixed)

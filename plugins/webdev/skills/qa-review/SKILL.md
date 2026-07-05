@@ -13,9 +13,11 @@ description: >
 Comprehensive audit of recently merged functionality to catch bugs, gaps, inconsistencies, and
 improvement opportunities. Resolve project commands via `/webdev:detect-stack`.
 
-## Step 1: Create a review branch
-**Invoke `/webdev:new-branch`** with a `review/` prefix (e.g. `review/qa-auth-flow`). Don't proceed
-without a confirmed branch.
+## Step 1: Confirm a clean starting point (no branch yet)
+The audit itself (Steps 2–8) is **read-only** — don't create a branch for it. Check
+`git status --short` and confirm you're on the up-to-date default branch (per `/webdev:sync-main`'s
+resolution) so the audit reads what's actually merged. A branch is created only in Step 9, and only
+if fixes are actually needed — a clean audit should leave no stray `review/*` branch behind.
 
 ## Step 2: Identify what was recently merged (parallel)
 ```bash
@@ -66,9 +68,11 @@ coverage gaps); **Sub-agent 3** = Steps 5–7 (static analysis, DB, docs). Merge
 - **Summary** — overall: merge-ready for production, or are there blockers?
 
 ## Step 9: Fix or flag
-- **Quick fixes** (typos, imports, style): apply directly on the review branch.
+- **Quick fixes** (typos, imports, style): **invoke `/webdev:new-branch`** with a `review/` prefix
+  (e.g. `review/qa-auth-flow`), apply the fixes there.
 - **Substantive issues**: describe clearly; let the user decide. After fixes, **invoke
   `/webdev:run-tests`** (targeted) to confirm nothing broke. Commit via `/webdev:commit`.
+- **No fixes needed**: report and stop — no branch was created, nothing to clean up.
 
 ## Notes
 - This is a review, not a rewrite — don't refactor working code or add features.
