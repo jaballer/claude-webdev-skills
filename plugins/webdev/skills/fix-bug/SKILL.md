@@ -88,8 +88,11 @@ repro steps explicitly in the PR test plan instead — and say that's what happe
 ## 5. Fix at the root cause
 
 Minimal diff that makes the decision correct. Resist refactoring around the bug — note
-tempting cleanups as follow-ups instead of expanding the diff. Run the new test: it must go
-**green**, and the Step 2 reproduction must no longer reproduce.
+tempting cleanups as follow-ups instead of expanding the diff. Then prove it on whichever
+path Step 4 took: **test path** — the new test goes **green**; **manual path** (harness can't
+reach the bug) — re-drive the recorded manual repro and observe it no longer reproducing.
+Either way the Step 2 reproduction must be gone; neither path invents a test after the fact
+to look covered.
 
 ## 6. Sweep for siblings
 
@@ -115,7 +118,7 @@ bug-fix PR reviewable in one pass.
 
 ```
 /webdev:fix-bug
-  ├── /webdev:new-branch        (fix/ prefix)
+  ├── /webdev:new-branch        (project's bug-fix prefix — fix/ default, per branchPrefixes)
   ├── /webdev:plan-inventory    (only if the root cause trips its triggers)
   ├── /webdev:run-tests         (new test red → green, then blast radius)
   └── /webdev:commit
