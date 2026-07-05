@@ -74,10 +74,12 @@ Read the full diff cold (`git diff`). For small fixes, check: new contradictions
 fix? stale references / "see step N" pointers? examples that no longer match the changed rule? did
 the sweep go wide enough (re-grep the original anti-pattern AND any new pattern introduced)?
 
-**For non-trivial fix commits** (>~5 lines, >1 file, or introducing a flag/rule/enum), the bullets
-aren't enough — apply the full hostile read from **`/webdev:commit` step 4** (4a rules 1–9, the 4b
-web-security checklist, and 4c project bug-classes). Most review back-and-forth is bugs introduced
-*by the fixes themselves*; this pass is worth it on every push.
+**For non-trivial fix commits** (>~5 lines, >1 file, introducing a flag/rule/enum/route, touching
+renames/deletions, or handling user input or queries — the same trivial-diff boundary as
+`/webdev:commit` step 4), the bullets aren't enough — apply the full hostile read from
+**`/webdev:commit` step 4** (4a rules 1–9, the 4b web-security checklist, 4c project bug-classes,
+and 4d). Most review back-and-forth is bugs introduced *by the fixes themselves*; this pass is
+worth it on every push.
 
 ## Step 9: Commit and push
 Stage only changed files. Message:
@@ -113,8 +115,10 @@ gh api graphql -f query='
       reviewThreads(first:100){ nodes{ id isResolved comments(first:100){ nodes{ databaseId } } } } } } }' \
   -f owner=<owner> -f repo=<repo> -F pr=<pr_number>
 ```
-For each tracked comment ID, find the thread whose `comments.nodes[].databaseId` **contains** it
-(not just `[0]`). For each matched thread with `isResolved:false`:
+`first:100` caps at one page — on big PRs add `pageInfo { hasNextPage endCursor }` and keep
+fetching with `after:` until exhausted; a tracked comment can live on page 2. For each tracked
+comment ID, find the thread whose `comments.nodes[].databaseId` **contains** it (not just `[0]`).
+For each matched thread with `isResolved:false`:
 ```bash
 gh api graphql -f query='
   mutation($threadId:ID!){ resolveReviewThread(input:{threadId:$threadId}){ thread{ isResolved } } }' \
@@ -146,11 +150,16 @@ themselves introduced. **Default: recheck once before declaring done.**
    ```bash
    gh pr checks <pr_number> --repo <owner>/<repo>
    ```
-   A **failing check** on the head SHA: read the failing run (`gh run view <run_id> --log-failed`)
-   and classify — *caused by these commits* → treat it as a finding and loop back like a comment;
-   *pre-existing on base or a known flake* → don't chase it, report it separately for the user.
-   For anything beyond a quick fix, **invoke `/webdev:fix-ci`** — it owns the full triage loop
-   (first-real-error, local repro, CI-vs-local divergences).
+   A **failing check** on the head SHA: read the failure and classify — *caused by these commits*
+   → treat it as a finding and loop back like a comment; *pre-existing on base or a known flake*
+   → don't chase it, report it separately for the user. Getting at the logs depends on the check
+   type: for a **GitHub Actions** check, resolve the run id from the check's `link` field
+   (`gh pr checks --json name,state,link` — the `/actions/runs/<id>/` segment) or
+   `gh run list --commit $(git rev-parse HEAD)`, then `gh run view <run_id> --log-failed`; for an
+   **external/status check** (no Actions run exists), follow the check's `link` to the provider
+   instead — `gh run view` can't read those. For anything beyond a quick fix, **invoke
+   `/webdev:fix-ci`** — it owns the full triage loop (first-real-error, local repro, CI-vs-local
+   divergences).
    **Pending checks** → note them; they gate the merge-readiness verdict below.
 5. **New comments or a caused-by-us failing check** → loop back to Step 4 with the same
    verify→sweep→fix→self-review→push→reply discipline. **Zero new and checks green** → done.

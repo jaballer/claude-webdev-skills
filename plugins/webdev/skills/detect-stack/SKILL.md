@@ -37,10 +37,12 @@ Look for `.claude/webdev.json` at the project root. Any key present there is **a
 }
 ```
 
-`commandPrefix` is prepended to every resolved command — this is how containerized setups
-work (e.g. KrateCMS sets `"commandPrefix": "ddev exec"` so `test` runs
-`ddev exec ./vendor/bin/phpunit`). If a project pins everything in `webdev.json`, detection
-is skipped entirely.
+`commandPrefix` is prepended to every **detected** command — this is how containerized setups
+work (e.g. a DDEV project sets `"commandPrefix": "ddev exec"` so a detected `./vendor/bin/phpunit`
+runs as `ddev exec ./vendor/bin/phpunit`). **Pinned commands are used verbatim — never apply the
+prefix to them.** A pinned command is written complete, prefix included (as in the example file);
+prepending again would produce `ddev exec ddev exec …`. If a project pins everything in
+`webdev.json`, detection is skipped entirely.
 
 ### 2. Detect anything not pinned
 
@@ -70,15 +72,21 @@ say so and ask rather than guess.
 - PHP: `pint.json` or Laravel present → `./vendor/bin/pint`; `.php-cs-fixer*` → php-cs-fixer.
 - Python: `ruff.toml` / `[tool.ruff]` → ruff; `[tool.black]` → black.
 
-**Type-check** (distinct from build — review skills run it in check mode):
-- JS/TS: `tsconfig.json` → `tsc --noEmit` (Vue: `vue-tsc --noEmit`; Astro: `astro check`); else N/A.
+**Type-check** (distinct from build — review skills run it in check mode). Run the project's
+local compiler, not a global one — bare `tsc` isn't on PATH when TypeScript is a devDependency:
+- JS/TS: a `typecheck`/`type-check` script in `package.json` wins; else `tsconfig.json` → the
+  manager's exec form (`pnpm exec tsc --noEmit`, `npm exec tsc -- --noEmit`, `yarn tsc --noEmit`;
+  Vue: `vue-tsc --noEmit`; Astro: `astro check` — same exec form); else N/A.
 - PHP: `phpstan.neon*` → `./vendor/bin/phpstan analyse`; `psalm.xml` → `./vendor/bin/psalm`.
-- Python: `[tool.mypy]` / `mypy.ini` → `mypy`; `pyrightconfig.json` → `pyright`.
+- Python: `[tool.mypy]` / `mypy.ini` → `mypy` via the manager's runner (`poetry run mypy`,
+  `uv run mypy`); `pyrightconfig.json` → `pyright` likewise.
 
-**Migration status** (only when the framework has migrations):
-- Laravel: `php artisan migrate:status` · Django: `manage.py showmigrations` ·
-  Rails: `rails db:migrate:status` · standalone tools (`prisma migrate status`, `alembic current`)
-  when their config is present. Otherwise N/A.
+**Migration status** (only when the framework has migrations). Same rule — resolve through the
+project runner, since bare `manage.py` or a global `prisma` fails outside an activated env:
+- Laravel: `php artisan migrate:status` · Django: `python manage.py showmigrations` (via
+  `poetry run`/`uv run` when that's the manager) · Rails: `rails db:migrate:status` ·
+  standalone tools via the manager's exec form (`pnpm exec prisma migrate status`,
+  `poetry run alembic current`) when their config is present. Otherwise N/A.
 
 **Framework** (informs conventions, scaffolding, where files live):
 - JS/TS: deps in `package.json` — `next`, `nuxt`, `@remix-run`, `astro`, `svelte`/`@sveltejs/kit`, `vite`, `react`, `vue`, `express`, `@nestjs`.
