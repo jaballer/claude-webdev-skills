@@ -37,6 +37,14 @@ violations now.
 > at scope · formatter). If either fails, stop and fix before step 4. If the formatter changed
 > files, re-run targeted tests on them before the self-review.
 
+## 3½. Verify user-facing behavior (conditional)
+
+If the diff has an observable surface — UI, routes, forms, API responses, rendered emails —
+**invoke `/webdev:verify`** before the self-review: exercise the change in the running app and
+carry its observed results into the PR's Manual test-plan line (see `/webdev:open-pr`). Skip for
+pure refactors, docs, or backend changes fully covered by tests — but then *say* it was skipped
+and why in the Output, don't leave verification silently absent.
+
 ## 4. Pre-push self-review (hostile read with enumeration)
 
 Before staging, read the full diff as a cold reviewer seeing it for the first time. The goal is
@@ -186,4 +194,5 @@ Skip only if the user said "commit but don't PR" or it's a trivial typo/comment 
 When complete, report back:
 - **Branch** · **Commit SHA** (short) · **PR URL** (if created)
 - **Test result**: pass/fail summary and scope
+- **Verify**: run (observed results) / skipped (why — no observable surface)
 - **Self-review**: tier used (`fast-path` or `full`) + confirmation 4a–4d were enumerated when full (note anything found + fixed)

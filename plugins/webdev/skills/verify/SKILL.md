@@ -57,9 +57,11 @@ In order of preference:
 1. **Browser automation** available in the session (Playwright MCP, a connected Chrome, or a
    project e2e harness) — use it for anything visual or interactive; take a screenshot as
    evidence for layout-affecting changes.
-2. **Direct HTTP** (`curl -s -w '%{http_code}'`) — right for API routes, redirects, headers,
-   and status codes. Assert on the body content, not just the code: a 200 error page passes
-   a status-only check.
+2. **Direct HTTP** — right for API routes, redirects, headers, and status codes. Status + body:
+   `curl -s -w '\n%{http_code}'`. Redirects and response headers: `-w` alone won't show them —
+   capture with `curl -s -i` (or `-D -`) and assert on the actual `Location:`/header value.
+   Either way assert on body content, not just the code: a 200 error page passes a
+   status-only check.
 3. **The rendered-HTML compromise** — `curl` + grep for expected markup proves presence, not
    appearance. Fine for "the new field renders"; NOT sufficient for "it looks right".
 
