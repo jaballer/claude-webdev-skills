@@ -62,7 +62,8 @@ that list is scope creep — note it as a follow-up instead of expanding the dif
 
 **Invoke `/webdev:run-tests`** scoped to the new files (full suite only for a foundational change
 — see that skill). Add tests that assert the invariants surfaced in the plan inventory, including
-the non-default execution context. Then run the resolved formatter/linter.
+the non-default execution context. Then run the resolved formatter/linter. For **user-facing**
+changes, also **invoke `/webdev:verify`** — exercise the change in the running app before commit.
 
 > **Agent Delegation:** the formatter and the scoped test run are independent — run them as
 > parallel sub-agents. Both must pass before committing.

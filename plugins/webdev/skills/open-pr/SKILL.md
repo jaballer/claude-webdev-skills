@@ -81,8 +81,9 @@ commands (from `/webdev:detect-stack`):
 - [x] Manual: <what you did in the browser, if applicable>
 ```
 Check a box only for what you actually ran. The full suite runs on CI — reference it as
-context, but don't pre-check it (it hasn't run at PR-open time). For UI work, state explicitly
-that visual verification was manual.
+context, but don't pre-check it (it hasn't run at PR-open time). For UI work, the Manual line
+should come from `/webdev:verify`'s observed results — state explicitly what was checked in the
+running app and what still needs human eyes.
 
 ### 4 — Follow-ups (optional)
 Issues filed, deferred work, or known limitations. Only include if real; don't pad.

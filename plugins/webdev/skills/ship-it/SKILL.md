@@ -46,7 +46,9 @@ fold it in.
 ### 4. Check it works
 Explain: "Tests are an automatic way to confirm we didn't break anything." **Invoke
 `/webdev:run-tests`** at the right scope and explain the result. If something fails, walk through
-the fix together rather than just silently patching it.
+the fix together rather than just silently patching it. If the change is visible in the app,
+**invoke `/webdev:verify`** too — seeing the change work in the running app is the most
+convincing check there is, especially for someone new to this.
 
 ### 5. Save and share the work
 Explain commits and PRs in one sentence each, then **invoke `/webdev:commit`** — it runs a careful

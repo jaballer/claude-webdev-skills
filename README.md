@@ -70,7 +70,7 @@ Claude will also invoke them automatically based on what you ask for.
 | `coAuthorTrailer` | `commit`, `review-pr` | **Default `false`.** Opt in to an AI co-author commit trailer |
 | `prFooter` | `open-pr` | **Default `false`.** Opt in to a "Generated with Claude Code" PR footer |
 
-## Skills (v1.4.0)
+## Skills (v1.5.0)
 
 **Getting started**
 
@@ -90,6 +90,7 @@ Claude will also invoke them automatically based on what you ask for.
 | `/webdev:detect-stack` | Foundation — resolves package manager, test/format/lint/dev commands, framework. Other skills call this first. |
 | `/webdev:plan-inventory` | Pre-implementation audit: 7 artifacts (references, execution-context, shared infra, sibling consistency, output pipeline, docs, value-shape) surfaced for approval *before* code. |
 | `/webdev:run-tests` | Runs tests at the smallest scope that proves the change; full suite only when the change fans out. |
+| `/webdev:verify` | Proves user-facing work in the running app — dev server up, drive the changed behavior (browser/HTTP), report only what was observed. Complements tests, doesn't replace them. |
 | `/webdev:new-branch` | Creates a properly-named branch off the up-to-date default branch (auto-detected). |
 | `/webdev:sync-main` | Returns the repo to a clean default branch after a merge; prunes refs and (with confirmation) deletes merged branches. |
 | `/webdev:commit` | Tests, formats, runs a hostile pre-push self-review + web security checklist, writes a conventional commit, pushes, opens a PR. |
@@ -119,8 +120,9 @@ Claude will also invoke them automatically based on what you ask for.
 
 ## Roadmap
 
-The core is complete. Planned next skills, roughly in order: `verify` (manual in-browser
-verification for UI work), `update-deps`, and a `compare`/changelog skill for release notes.
+The core is complete. Planned next skills, roughly in order: `update-deps` (dependency
+upgrades with changelog reading and foundational-tier testing), and a `compare`/changelog
+skill for release notes.
 
 ## Conventions (house style)
 
