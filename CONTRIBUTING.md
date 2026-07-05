@@ -35,6 +35,21 @@ footers unless the project opts in via `webdev.json` (`coAuthorTrailer` / `prFoo
 **Keep it portable.** No personal project names, local-machine assumptions, or references that
 only make sense in one repo. Note BSD vs GNU differences when a shell command diverges.
 
+**Verify every tool-behavior claim.** A skill that asserts a CLI flag, JSON field, or API shape
+(`gh pr checks --json link`, `--match-head-commit`, a pagination cap) must have that claim
+verified against the real tool in the authoring session — `gh <cmd> --help`, the field list from
+an intentional `--json bogus` error, a live query, or the provider's docs. Never ship an
+operational detail from memory: agents execute these instructions literally, and a wrong flag is
+worse than no flag.
+
+**Trace the blast radius, then attack your own change.** Before pushing, (1) find every consumer
+of what you changed — grep for the skill name, the step numbers you shifted, the threshold or key
+you touched, across all skills, the README tables, and `examples/webdev.json` — and update them
+in the same commit; (2) run an adversarial self-review at external-reviewer depth: simulate an
+agent following each changed instruction literally in the ugly cases (fork PR, detached HEAD,
+no PR yet, >30 review comments, empty state). Where does it stall, contradict itself, or
+dead-end? Fix those before review finds them.
+
 ## Checklist for a PR that adds or changes a skill
 
 - [ ] Frontmatter `description` contains realistic trigger phrases and disambiguates siblings
@@ -42,4 +57,7 @@ only make sense in one repo. Note BSD vs GNU differences when a shell command di
 - [ ] `## Output` contract present and accurate
 - [ ] Any new `webdev.json` key is documented in `examples/webdev.json` and the README key table
 - [ ] README skill table updated (one row per skill)
+- [ ] Tool-behavior claims (flags, JSON fields, API shapes) verified against the real tool this session
+- [ ] Blast radius traced: consumers, cross-references, step numbers, README/examples all in sync
+- [ ] Adversarial self-pass done (literal execution in edge cases: forks, detached HEAD, no-PR, pagination)
 - [ ] No AI-attribution defaults; no personal/project-specific references
