@@ -23,8 +23,10 @@ Explicit number/URL if given; otherwise the current branch's PR via
 ## Step 2: The pre-merge gate — verify, don't assume
 
 ```bash
-gh pr view <number> --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName,title
+gh pr view <number> --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName,title,headRefOid
 ```
+
+**Record `headRefOid`** — that SHA is what these gates certify, and Step 4 pins the merge to it.
 
 Walk every gate; each has a defined stop:
 
@@ -33,8 +35,8 @@ Walk every gate; each has a defined stop:
 | State | `OPEN`, not a draft | Draft → stop; ask if it should be marked ready first |
 | Checks (`statusCheckRollup`) | all green | Failing → stop, **invoke `/webdev:fix-ci`**. Pending → wait (`gh pr checks --watch` or a `ScheduleWakeup` recheck), don't merge ahead of CI |
 | Review (`reviewDecision`) | `APPROVED`, or the repo requires no review | `CHANGES_REQUESTED` → stop, **invoke `/webdev:review-pr`**. `REVIEW_REQUIRED` → stop; a required review can't be merged around |
-| Threads | no unresolved review threads (count via the reviewThreads GraphQL query in `/webdev:review-pr` step 11) | List the open threads; offer `/webdev:review-pr` |
-| Up to date (`mergeStateStatus`) | `CLEAN` | `BEHIND` → update the branch (`gh pr update-branch`, or rebase if that's the repo's convention) and **wait for checks to re-run on the new head** — green on a stale base proves nothing. `DIRTY` → conflicts; resolve on the branch locally (merge base in, resolve, test, push), never through the web editor blindly |
+| Threads | no unresolved review threads (the reviewThreads GraphQL query in `/webdev:review-pr` step 11 — **paginate**: `reviewThreads(first:100)` caps at 100 per request, so on big PRs follow `pageInfo { hasNextPage endCursor }` until exhausted; an unresolved thread on page 2 is still a gate) | List the open threads; offer `/webdev:review-pr` |
+| Up to date (`mergeStateStatus`) | `CLEAN` | `BEHIND` → update the branch (`gh pr update-branch`, or rebase if that's the repo's convention) — **this creates a new head: re-run the ENTIRE gate table against it**, not just checks. The update can invalidate approvals (stale-review dismissal) and changes `headRefOid`, so re-fetch reviewDecision, threads, and the new SHA before merging. `DIRTY` → conflicts; resolve on the branch locally (merge base in, resolve, test, push), never through the web editor blindly |
 
 **No repo-required review + no reviewer signal** — the gate table can pass on a repo with no
 branch protection. State that plainly ("merging unreviewed — the repo doesn't require review")
@@ -61,8 +63,19 @@ re-ask.** If this skill was reached any other way (chained, inferred, "what's ne
 `title · #number · method · base` and get a yes first.
 
 ```bash
-gh pr merge <number> --squash --delete-branch   # or --merge / --rebase
+gh pr merge <number> --squash --delete-branch --match-head-commit <headRefOid>   # or --merge / --rebase
 ```
+
+**`--match-head-commit` pins the merge to the SHA the gates certified** (from Step 2, re-fetched
+after any branch update). If someone pushed to the PR between the gate check and this command,
+the merge is refused instead of landing unverified code — on refusal, go back to Step 2 for the
+new head.
+
+**Merge-queue repos:** when the base branch requires a merge queue, the queue owns the merge
+method — don't pass `--squash`/`--merge`/`--rebase`; `gh pr merge <number>` adds the PR to the
+queue instead of merging immediately. Expect `state` to stay `OPEN` while queued: verify by
+watching for `MERGED` (or a queue rejection) rather than assuming, and report "queued" honestly
+if it hasn't landed yet.
 
 `--delete-branch` removes the remote branch and switches the local checkout back to base. If
 the local deletion part fails (dirty tree, checked-out elsewhere), the merge itself is done —
@@ -74,13 +87,16 @@ the local deletion part fails (dirty tree, checked-out elsewhere), the merge its
 gh pr view <number> --json state,mergedAt,mergeCommit
 ```
 Confirm `MERGED` + capture the merge/squash SHA. Note any issues auto-closed by `Closes #N`.
-Then check whether the merge kicked off base-branch workflows (deploys):
+Then check whether **this merge** kicked off base-branch workflows (deploys) — filter to the
+merge commit, not just the branch, or an older red run on a busy base gets misattributed to
+this merge:
 ```bash
-gh run list --branch <base> --limit 3
+gh run list --branch <base> --commit <merge-sha> --limit 5
 ```
-If a deploy/CI run started, report it (and its status if quickly available) — **a red deploy
-run goes to `/webdev:fix-ci`**, on a fresh branch. Don't declare the loop closed while a
-just-triggered deploy is visibly failing.
+If a deploy/CI run started, report it (and its status if quickly available) — **a red run
+triggered by this merge goes to `/webdev:fix-ci`**, on a fresh branch. Don't declare the loop
+closed while a just-triggered deploy is visibly failing — and don't chase base failures that
+predate the merge; report those separately.
 
 ## Step 6: Clean up
 

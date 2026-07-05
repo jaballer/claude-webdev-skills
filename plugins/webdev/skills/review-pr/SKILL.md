@@ -115,8 +115,10 @@ gh api graphql -f query='
       reviewThreads(first:100){ nodes{ id isResolved comments(first:100){ nodes{ databaseId } } } } } } }' \
   -f owner=<owner> -f repo=<repo> -F pr=<pr_number>
 ```
-For each tracked comment ID, find the thread whose `comments.nodes[].databaseId` **contains** it
-(not just `[0]`). For each matched thread with `isResolved:false`:
+`first:100` caps at one page — on big PRs add `pageInfo { hasNextPage endCursor }` and keep
+fetching with `after:` until exhausted; a tracked comment can live on page 2. For each tracked
+comment ID, find the thread whose `comments.nodes[].databaseId` **contains** it (not just `[0]`).
+For each matched thread with `isResolved:false`:
 ```bash
 gh api graphql -f query='
   mutation($threadId:ID!){ resolveReviewThread(input:{threadId:$threadId}){ thread{ isResolved } } }' \
