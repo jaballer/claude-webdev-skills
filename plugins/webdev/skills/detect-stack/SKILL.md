@@ -29,6 +29,7 @@ Look for `.claude/webdev.json` at the project root. Any key present there is **a
   "test":    "pnpm test",
   "format":  "pnpm run format",
   "lint":    "pnpm run lint",
+  "typecheck": "pnpm exec tsc --noEmit",
   "dev":     "pnpm dev",
   "build":   "pnpm build",
   "commandPrefix": "",
@@ -52,7 +53,7 @@ say so and ask rather than guess.
 |---|---|---|---|
 | `pnpm-lock.yaml` | pnpm | `pnpm install` | `pnpm run <s>` / `pnpm <s>` |
 | `yarn.lock` | yarn | `yarn install` | `yarn <s>` |
-| `bun.lockb` | bun | `bun install` | `bun run <s>` |
+| `bun.lock` / `bun.lockb` | bun | `bun install` | `bun run <s>` |
 | `package-lock.json` | npm | `npm install` | `npm run <s>` |
 | `composer.lock` / `composer.json` | composer | `composer install` | `composer <s>` |
 | `poetry.lock` / `[tool.poetry]` in `pyproject.toml` | poetry | `poetry install` | `poetry run <s>` |
@@ -69,12 +70,28 @@ say so and ask rather than guess.
 - PHP: `pint.json` or Laravel present → `./vendor/bin/pint`; `.php-cs-fixer*` → php-cs-fixer.
 - Python: `ruff.toml` / `[tool.ruff]` → ruff; `[tool.black]` → black.
 
+**Type-check** (distinct from build — review skills run it in check mode):
+- JS/TS: `tsconfig.json` → `tsc --noEmit` (Vue: `vue-tsc --noEmit`; Astro: `astro check`); else N/A.
+- PHP: `phpstan.neon*` → `./vendor/bin/phpstan analyse`; `psalm.xml` → `./vendor/bin/psalm`.
+- Python: `[tool.mypy]` / `mypy.ini` → `mypy`; `pyrightconfig.json` → `pyright`.
+
+**Migration status** (only when the framework has migrations):
+- Laravel: `php artisan migrate:status` · Django: `manage.py showmigrations` ·
+  Rails: `rails db:migrate:status` · standalone tools (`prisma migrate status`, `alembic current`)
+  when their config is present. Otherwise N/A.
+
 **Framework** (informs conventions, scaffolding, where files live):
 - JS/TS: deps in `package.json` — `next`, `nuxt`, `@remix-run`, `astro`, `svelte`/`@sveltejs/kit`, `vite`, `react`, `vue`, `express`, `@nestjs`.
 - PHP: `laravel/framework` → Laravel; `symfony/*` → Symfony.
 - Python: `django`, `flask`, `fastapi`.
 
 **Dev / run command:** `scripts.dev` (JS) · `php artisan serve` or a `ddev`/`docker-compose.yml` present (PHP) · `manage.py runserver` (Django). If a `Makefile`/`Taskfile`/`justfile` defines `dev`/`test`/`start`, prefer those — they are the project's intended entry points.
+
+**Monorepo / workspaces:** if `pnpm-workspace.yaml`, `turbo.json`, `nx.json`, `lerna.json`, or a
+`workspaces` field in the root `package.json` is present, commands are per-package, not global.
+Resolve the profile for the package containing the files in scope (nearest `package.json` up the
+tree); if the scope is unclear, list the workspace packages and ask which one applies. Prefer the
+repo's task runner (`turbo run test`, `nx test <project>`, `pnpm --filter <pkg> test`) over `cd`.
 
 ### 3. When detection is ambiguous
 
@@ -88,9 +105,10 @@ Report a concise **stack profile** the caller can act on:
 
 - **Source**: `webdev.json` | `detected` | `mixed` (which keys came from where)
 - **Package manager**, **install**
-- **Test command**, **format command**, **lint command**
-- **Framework** (+ version if known)
+- **Test command**, **format command**, **lint command**, **type-check command** (or N/A)
+- **Framework** (+ version if known) · **Migration-status command** (or N/A)
 - **Dev command**, **build command**
+- **Workspace/package** (monorepos only): which package the profile applies to
 - **Command prefix** (if any)
 - **Branch prefixes** allowed
 - **Gaps / ambiguities**: anything you couldn't resolve, with a recommended next step (usually: pin it in `webdev.json`)

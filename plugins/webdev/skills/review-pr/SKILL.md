@@ -134,7 +134,7 @@ themselves introduced. **Default: recheck once before declaring done.**
    Step 10 replies will trip the timestamp filter otherwise):
    ```bash
    ME=$(gh api user --jq .login)
-   # macOS/BSD date (Jabal's local env); GNU: PUSH_TS=$(date -u -d "$(git log -1 --format=%cI HEAD)" +"%Y-%m-%dT%H:%M:%SZ")
+   # BSD/macOS date shown; on GNU date use: PUSH_TS=$(date -u -d "$(git log -1 --format=%cI HEAD)" +"%Y-%m-%dT%H:%M:%SZ")
    PUSH_TS=$(date -u -j -f "%Y-%m-%dT%H:%M:%S%z" "$(git log -1 --format=%cI HEAD | sed 's/:\(..\)$/\1/')" +"%Y-%m-%dT%H:%M:%SZ")
    gh api repos/<owner>/<repo>/pulls/<pr_number>/comments \
      | jq --arg me "$ME" --arg ts "$PUSH_TS" '[.[]|select((.created_at|fromdateiso8601) > ($ts|fromdateiso8601) and .user.login != $me)]|length'

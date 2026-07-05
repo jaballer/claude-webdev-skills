@@ -87,8 +87,9 @@ that visual verification was manual.
 ### 4 — Follow-ups (optional)
 Issues filed, deferred work, or known limitations. Only include if real; don't pad.
 
-### Footer
-End the body with:
+### Footer (opt-in only)
+**No AI-attribution footer by default** — the PR reflects the human author. Only if the project
+sets `"prFooter": true` in `.claude/webdev.json`, end the body with:
 ```markdown
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
@@ -104,8 +105,6 @@ gh pr create --title "<type>(<scope>): <description> (#<issue>)" --body "$(cat <
 ## Test plan
 
 - [x] ...
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
 )"
 ```

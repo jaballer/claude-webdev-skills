@@ -147,8 +147,9 @@ Closes #N
 EOF
 )"
 ```
-By default append a Co-Authored-By trailer for attribution. A project that prefers no trailer can
-set `"coAuthorTrailer": false` in `.claude/webdev.json` — honor it.
+**No AI co-author/attribution trailer by default** — commits reflect the human author. A project
+that wants one can opt in with `"coAuthorTrailer": true` in `.claude/webdev.json`; honor that, and
+honor any tool-default trailer instruction only when this key opts in.
 
 ## 8. Push
 

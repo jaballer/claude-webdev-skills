@@ -38,7 +38,7 @@ failures as findings — don't fix yet (Step 9).
 
 ## Step 5: Smoke test with static analysis
 Run the resolved checks that apply to the stack:
-- **Build / type-check** — resolved build or type-checker; confirm it compiles.
+- **Build / type-check** — resolved build and type-check commands (per `/webdev:detect-stack`); confirm it compiles.
 - **Lint / format check** — resolved lint in check mode (`eslint`, `biome check`, `pint --test`, `ruff check`).
 - **Framework integrity** — route/view/config compile check if the framework offers one.
 
@@ -46,7 +46,7 @@ Run the resolved checks that apply to the stack:
 non-obvious *why*, and empty/redundant docblocks. Surface in Style / Consistency Issues if present.
 
 ## Step 6: Database concerns
-Check the resolved migration-status command (e.g. migrations applied/pending). Are new migrations
+Run the resolved migration-status command from `/webdev:detect-stack` (skip if N/A for the stack). Are new migrations
 reversible? Proper indexes on frequently-queried columns? Correct foreign-key constraints?
 
 ## Step 7: Documentation alignment
