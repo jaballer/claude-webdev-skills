@@ -14,6 +14,9 @@ description: >
 This skill **delegates** to atomic skills rather than re-describing them. Its job is sequencing
 and making sure no phase is skipped. Resolve all project commands via `/webdev:detect-stack`.
 
+> **Bug report, not a feature?** Use `/webdev:fix-bug` instead — the discipline differs
+> (reproduce → failing test → fix), and skipping it is how speculative patches ship.
+
 ## 0. Branch first
 
 **Invoke `/webdev:new-branch`** before writing any code. Don't proceed without a confirmed branch.

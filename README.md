@@ -69,7 +69,7 @@ Claude will also invoke them automatically based on what you ask for.
 | `coAuthorTrailer` | `commit`, `review-pr` | **Default `false`.** Opt in to an AI co-author commit trailer |
 | `prFooter` | `open-pr` | **Default `false`.** Opt in to a "Generated with Claude Code" PR footer |
 
-## Skills (v1.2.0)
+## Skills (v1.3.0)
 
 **Getting started**
 
@@ -85,6 +85,7 @@ Claude will also invoke them automatically based on what you ask for.
 | Skill | What it does |
 |---|---|
 | `/webdev:new-feature` | **Orchestrator** — drives a whole change: branch → inventory → implement → test → commit → PR by chaining the skills below. |
+| `/webdev:fix-bug` | **Orchestrator** for defects — reproduce → root-cause → failing test → fix → sibling sweep → commit/PR. Never fixes what it hasn't seen fail. |
 | `/webdev:detect-stack` | Foundation — resolves package manager, test/format/lint/dev commands, framework. Other skills call this first. |
 | `/webdev:plan-inventory` | Pre-implementation audit: 7 artifacts (references, execution-context, shared infra, sibling consistency, output pipeline, docs, value-shape) surfaced for approval *before* code. |
 | `/webdev:run-tests` | Runs tests at the smallest scope that proves the change; full suite only when the change fans out. |
@@ -116,7 +117,7 @@ Claude will also invoke them automatically based on what you ask for.
 
 ## Roadmap
 
-The core is complete. Planned next skills, roughly in order: `fix-bug` (reproduce → failing test → fix orchestrator), `merge-pr` (verify
+The core is complete. Planned next skills, roughly in order: `merge-pr` (verify
 approvals + checks, merge, chain to `sync-main`), `verify` (manual in-browser verification for
 UI work), `update-deps`, and a `compare`/changelog skill for release notes.
 
