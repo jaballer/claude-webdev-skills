@@ -66,8 +66,12 @@ codebase's conventions** (read `CLAUDE.md` if present). Work through all fixes b
 
 ## Step 7: Run tests
 **Invoke `/webdev:run-tests`** scoped to the fix's blast radius (full only if it touched shared code
-or a targeted run surprised you). A docs-only fix needs no run. Don't commit broken code. If there
-were frontend changes, note the user may need to run the dev/build command to see them.
+or a targeted run surprised you). A docs-only fix needs no run. Don't commit broken code.
+**If the fixes touch user-facing surface** (UI, routes, forms, API responses), also **invoke
+`/webdev:verify`** on the changed behavior before committing — this path commits directly
+(Step 9) without `/webdev:commit`'s step 3½, so verification has to happen here or not at all.
+Reuse earlier verify rows where the behavior overlaps; carry observed results into the Step 10
+replies where relevant.
 
 ## Step 8: Pre-push self-review
 Read the full diff cold (`git diff`). For small fixes, check: new contradictions introduced by the

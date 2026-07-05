@@ -40,10 +40,20 @@ violations now.
 ## 3½. Verify user-facing behavior (conditional)
 
 If the diff has an observable surface — UI, routes, forms, API responses, rendered emails —
-**invoke `/webdev:verify`** before the self-review: exercise the change in the running app and
-carry its observed results into the PR's Manual test-plan line (see `/webdev:open-pr`). Skip for
-pure refactors, docs, or backend changes fully covered by tests — but then *say* it was skipped
-and why in the Output, don't leave verification silently absent.
+make sure `/webdev:verify` results exist for **this** diff before the self-review, and carry the
+observed results into the PR's Manual test-plan line (see `/webdev:open-pr`):
+- **Already verified this session** (an orchestrator like `new-feature`, `ship-it`, or `fix-bug`
+  invoked verify just before chaining here, and the diff hasn't changed since) → **reuse those
+  recorded results**; don't re-drive the app for the same diff — a second pass wastes time and
+  re-runs seeding/form submits.
+- **No current results** (direct `/webdev:commit` invocation, or the diff changed after the last
+  verify) → **invoke `/webdev:verify`** now.
+- **If verify's fail-fix loop changed code**, redo steps 2–3 at targeted scope on the changed
+  files before continuing — a fix made during verification must not dodge the gates that already
+  passed on the previous diff.
+
+Skip only for pure refactors, docs, or backend changes fully covered by tests — but then *say*
+it was skipped and why in the Output, don't leave verification silently absent.
 
 ## 4. Pre-push self-review (hostile read with enumeration)
 

@@ -25,7 +25,10 @@ here."
 
 ## Step 1: Build the verification list from the diff
 
-Read the change (`git diff <base>...HEAD` or the working diff) and write down each
+Read the **whole** change under verification. Pre-commit (the normal `/webdev:commit` /
+`/webdev:new-feature` path), committed work alone misses the point — combine:
+`git diff <base>...HEAD` (committed) **plus** `git diff` and `git diff --cached` (working tree /
+staged). Post-commit, `git diff <base>...HEAD` suffices. From that union, write down each
 **user-observable behavior** it touches — typically 3–7 rows:
 
 | # | Behavior | How to reach it | Expected |
@@ -73,6 +76,9 @@ Match the method to the claim: never make a **visual** claim ("looks correct", "
 - **pass** — observed the expected result; record what was seen (code, text, screenshot ref).
 - **fail** — observed the wrong result. This is a finding: fix it, then re-verify **that row
   and any row the fix could touch** (cap: 2 fix-and-recheck loops, then stop and report).
+  A fix made here changed the diff — **re-run the invalidated quality gates** (targeted tests +
+  formatter on the changed files; in the `/webdev:commit` flow, redo its steps 2–3) before the
+  work proceeds to staging. Verification must not become the door code sneaks through untested.
 - **needs-human** — can't be observed from here (subjective visual polish, a real device,
   an external service in live mode). Hand the user a numbered manual script: exact URL,
   exact steps, expected result — precise enough to run without asking anything.

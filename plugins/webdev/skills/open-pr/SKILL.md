@@ -21,6 +21,10 @@ change without re-deriving the design decisions or guessing what was tested.
 - The branch is pushed to origin (`git status` says "up to date with 'origin/<branch>'")
 - Tests passed locally at the appropriate scope (see `/webdev:run-tests`); CI runs the full
   suite on the PR
+- **User-facing change? Verification evidence exists** — `/webdev:verify` results for this diff
+  (typically from `/webdev:commit` step 3½). If none exist and you can't run verify now, the
+  Manual line must say so explicitly — "not verified in the running app; needs human QA" plus
+  the manual script — never a silently absent or vaguely-checked Manual line.
 
 If any aren't true, stop and resolve them first. Don't open a PR for unpushed code.
 
