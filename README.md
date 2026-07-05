@@ -53,7 +53,7 @@ Claude will also invoke them automatically based on what you ask for.
   "test":   "pnpm test",
   "format": "pnpm run format",
   "dev":    "pnpm dev",
-  "branchPrefixes": ["feature", "fix", "refactor", "docs", "chore"]
+  "branchPrefixes": ["feature", "fix", "refactor", "docs", "chore", "review"]
 }
 ```
 
