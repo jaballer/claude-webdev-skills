@@ -149,6 +149,8 @@ themselves introduced. **Default: recheck once before declaring done.**
    A **failing check** on the head SHA: read the failing run (`gh run view <run_id> --log-failed`)
    and classify — *caused by these commits* → treat it as a finding and loop back like a comment;
    *pre-existing on base or a known flake* → don't chase it, report it separately for the user.
+   For anything beyond a quick fix, **invoke `/webdev:fix-ci`** — it owns the full triage loop
+   (first-real-error, local repro, CI-vs-local divergences).
    **Pending checks** → note them; they gate the merge-readiness verdict below.
 5. **New comments or a caused-by-us failing check** → loop back to Step 4 with the same
    verify→sweep→fix→self-review→push→reply discipline. **Zero new and checks green** → done.
