@@ -1,5 +1,5 @@
 {
-  "_comment": "Drop this at .claude/webdev.json in any project to pin commands explicitly. Any key here overrides auto-detection. Delete keys you want detected automatically. This example mirrors a DDEV + Laravel setup. This file shows EVERY supported key — real projects should keep only the ones they need to pin.",
+  "_comment": "Drop this at .claude/webdev.json in any project to pin commands explicitly. Any key here overrides auto-detection. Delete keys you want detected automatically. This example mirrors a DDEV + Laravel setup. This file shows EVERY supported key — real projects should keep only the ones they need to pin. NOTE: pinned commands are used verbatim; commandPrefix applies only to DETECTED commands, so write pinned commands complete (prefix included) as below.",
 
   "packageManager": "composer",
   "commandPrefix": "ddev exec",
