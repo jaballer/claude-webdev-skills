@@ -34,9 +34,9 @@ Walk every gate; each has a defined stop:
 |---|---|---|
 | State | `OPEN`, not a draft | Draft → stop; ask if it should be marked ready first |
 | Checks (`statusCheckRollup`) | all green | Failing → stop, **invoke `/webdev:fix-ci`**. Pending → wait (`gh pr checks --watch` or a `ScheduleWakeup` recheck), don't merge ahead of CI |
-| Review (`reviewDecision`) | `APPROVED`, or the repo requires no review | `CHANGES_REQUESTED` → stop, **invoke `/webdev:review-pr`**. `REVIEW_REQUIRED` → stop; a required review can't be merged around |
+| Review (`reviewDecision`) | `APPROVED` **and the approval covers the current head** — `reviewDecision` alone can be an approval of an older diff when the repo doesn't dismiss stale reviews. Verify: `gh api graphql` for `reviews(states: APPROVED, last: 10) { nodes { commit { oid } submittedAt } }` and confirm the newest approval's `commit.oid` equals `headRefOid` (or every commit after it is from the approver). Or the repo requires no review | `CHANGES_REQUESTED` → stop, **invoke `/webdev:review-pr`**. `REVIEW_REQUIRED` → stop; a required review can't be merged around. **Approval predates the head** → report "approved, but not on the latest commits" — the user decides (re-request review, or explicitly proceed) |
 | Threads | no unresolved review threads (the reviewThreads GraphQL query in `/webdev:review-pr` step 11 — **paginate**: `reviewThreads(first:100)` caps at 100 per request, so on big PRs follow `pageInfo { hasNextPage endCursor }` until exhausted; an unresolved thread on page 2 is still a gate) | List the open threads; offer `/webdev:review-pr` |
-| Up to date (`mergeStateStatus`) | `CLEAN` | `BEHIND` → update the branch (`gh pr update-branch`, or rebase if that's the repo's convention) — **this creates a new head: re-run the ENTIRE gate table against it**, not just checks. The update can invalidate approvals (stale-review dismissal) and changes `headRefOid`, so re-fetch reviewDecision, threads, and the new SHA before merging. `DIRTY` → conflicts; resolve on the branch locally (merge base in, resolve, test, push), never through the web editor blindly |
+| Up to date (`mergeStateStatus`) | `CLEAN`, or `HAS_HOOKS` (GitHub Enterprise pre-receive hooks — mergeable with passing status; treat as pass). `UNKNOWN` → GitHub computes this async: re-query after a few seconds rather than failing the gate | `BEHIND` → update the branch (`gh pr update-branch`, or rebase if that's the repo's convention) — **this creates a new head: re-run the ENTIRE gate table against it**, not just checks. The update can invalidate approvals (stale-review dismissal) and changes `headRefOid`, so re-fetch reviewDecision, threads, and the new SHA before merging. `DIRTY` → conflicts; resolve on the branch locally (merge base in, resolve, test, push), never through the web editor blindly |
 
 **No repo-required review + no reviewer signal** — the gate table can pass on a repo with no
 branch protection. State that plainly ("merging unreviewed — the repo doesn't require review")
@@ -47,10 +47,14 @@ what's being overridden.
 
 ## Step 3: Pick the merge method
 
-Resolution order:
-1. `"mergeMethod"` in `.claude/webdev.json` (`"squash"` | `"merge"` | `"rebase"`) — authoritative.
-2. What the repo allows and actually uses: `gh repo view --json squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed`, and check a couple of recent merged PRs / `git log <base>` to see which shape the history has (squashed single commits vs merge commits).
-3. Only one method allowed → use it. Genuinely ambiguous → ask once, then offer to pin the answer in `webdev.json`.
+Always fetch what the repo allows first:
+`gh repo view --json squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed`. Then:
+1. `"mergeMethod"` in `.claude/webdev.json` (`"squash"` | `"merge"` | `"rebase"`) — authoritative,
+   **but validate it against the allowed methods**: a stale/copied pin the repo forbids stops
+   here with the mismatch ("webdev.json pins rebase; repo allows squash only"), before any
+   confirmation — not as a `gh pr merge` failure after it.
+2. Otherwise, what the repo allows and actually uses: the allowed flags above, plus a couple of recent merged PRs / `git log <base>` for which shape the history has (squashed single commits vs merge commits).
+3. Only one method allowed → use it. Genuinely ambiguous → ask once. **Offer to pin the answer in `webdev.json` AFTER Step 5** — editing the file now would either dirty the tree or, if committed to the PR branch, change the head and invalidate Step 2's certified `headRefOid`.
 
 For a squash, the squash-commit title should be the PR title (already conventional-commits
 shaped per `/webdev:open-pr`) — pass `--subject` explicitly if `gh`'s default would differ.
