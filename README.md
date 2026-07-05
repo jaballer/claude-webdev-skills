@@ -53,7 +53,7 @@ Claude will also invoke them automatically based on what you ask for.
   "test":   "pnpm test",
   "format": "pnpm run format",
   "dev":    "pnpm dev",
-  "branchPrefixes": ["feature", "fix", "refactor", "docs", "chore"]
+  "branchPrefixes": ["feature", "fix", "refactor", "docs", "chore", "review"]
 }
 ```
 
@@ -66,7 +66,7 @@ Claude will also invoke them automatically based on what you ask for.
 | `migrationStatus` | `qa-review` | Migration-status command, if the stack has one |
 | `defaultBranch` | `new-branch`, `sync-main`, `open-pr` | Overrides origin/HEAD detection |
 | `mergeMethod` | `merge-pr` | `"squash"` / `"merge"` / `"rebase"` — overrides repo-history detection |
-| `branchPrefixes` | `new-branch` | Allowed branch name prefixes |
+| `branchPrefixes` | `new-branch`, `fix-bug` | Allowed branch name prefixes |
 | `coAuthorTrailer` | `commit`, `review-pr` | **Default `false`.** Opt in to an AI co-author commit trailer |
 | `prFooter` | `open-pr` | **Default `false`.** Opt in to a "Generated with Claude Code" PR footer |
 

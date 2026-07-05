@@ -33,7 +33,7 @@ Look for `.claude/webdev.json` at the project root. Any key present there is **a
   "dev":     "pnpm dev",
   "build":   "pnpm build",
   "commandPrefix": "",
-  "branchPrefixes": ["feature", "fix", "refactor", "docs", "chore"]
+  "branchPrefixes": ["feature", "fix", "refactor", "docs", "chore", "review"]
 }
 ```
 
