@@ -44,9 +44,11 @@ up-to-date default branch.
    ```
    If non-empty, say what's there and ask: **carry it onto the new branch** (fine when the
    work-in-progress belongs to the new task — git carries it through the checkouts unless files
-   conflict), or **stash first** (`git stash push -u`, pop after branching — the `-u` matters:
-   plain `git stash push` leaves untracked `??` files in the tree, so they'd still block the
-   checkout or ride along despite the stash). Never stash or discard without asking.
+   conflict), or **stash it** (`git stash push -u` — the `-u` matters: plain `git stash push`
+   leaves untracked `??` files in the tree). For a stash, ask one more thing: does the WIP
+   belong to the NEW task? If yes, pop after branching. If it's unrelated, **leave it stashed**
+   — popping onto the new branch would put it right back in the diff, where commit's staging
+   step can sweep it into the wrong PR. Never stash or discard without asking.
 
    ```bash
    git checkout <base> && git pull --ff-only
