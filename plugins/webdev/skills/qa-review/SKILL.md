@@ -69,13 +69,22 @@ coverage gaps); **Sub-agent 3** = Steps 5–7 (static analysis, DB, docs). Merge
 - **Summary** — overall: merge-ready for production, or are there blockers?
 
 ## Step 9: Fix or flag
+
+**First, leave the base clean.** Steps 4–6 can write generated files onto the default branch
+(coverage reports, test snapshots, compiled assets, schema dumps) even though the audit is
+read-only in intent. Run `git status --short`: if regenerable audit artifacts appear, restore
+tracked files (`git restore <paths>`) and remove untracked ones (preview with `git clean -nd`,
+then `git clean -fd <paths>`) so the base is exactly as found. Otherwise they either leave the
+default branch dirty (clean-audit path) or get swept into the fix commit (fix path).
+
 - **Before applying ANY fix** — quick or substantive — **invoke `/webdev:new-branch`** with a
   `review/` prefix (e.g. `review/qa-auth-flow`). The audit ran on the default branch; edits must not.
 - **Quick fixes** (typos, imports, style): apply on that branch.
 - **Substantive issues**: describe clearly; let the user decide — if they say fix, same branch.
 - After fixes, **invoke `/webdev:run-tests`** (targeted) to confirm nothing broke. Commit via
   `/webdev:commit`.
-- **No fixes needed**: report and stop — no branch was created, nothing to clean up.
+- **No fixes needed**: report and stop — the base is already restored to clean above, so no branch
+  was created and nothing is left behind.
 
 ## Notes
 - This is a review, not a rewrite — don't refactor working code or add features.
