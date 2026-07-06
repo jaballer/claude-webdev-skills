@@ -92,6 +92,13 @@ with the code, not that it would have caught the bug. If the bug genuinely can't
 by the project's test harness (visual layout, third-party interaction), record the manual
 repro steps explicitly in the PR test plan instead — and say that's what happened.
 
+**Speculative path (Step 2's unreproduced-but-user-approved case):** there's no observed failure
+to match, so you can't honestly write a test that fails "for the same reason as the bug" — don't
+manufacture one. Write the test that asserts what your **hypothesis** says is correct, note that
+it couldn't be confirmed red against the real defect (never reproduced), and carry that limitation
+into the fix, the PR summary, and the Output — the hypothesis + verification-limits shape the
+Output contract defines. A speculative fix ships as a labeled hypothesis, not as proven.
+
 ## 5. Fix at the root cause
 
 Minimal diff that makes the decision correct. Resist refactoring around the bug — note
