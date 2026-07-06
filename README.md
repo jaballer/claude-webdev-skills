@@ -64,9 +64,9 @@ Claude will also invoke them automatically based on what you ask for.
 | `packageManager`, `install`, `test`, `format`, `lint`, `typecheck`, `dev`, `build` | all command-running skills | The resolved commands |
 | `commandPrefix` | all command-running skills | Prepended to **detected** commands only (e.g. `ddev exec`); pinned commands are used verbatim — write them complete, prefix included |
 | `migrationStatus` | `qa-review` | Migration-status command, if the stack has one |
-| `defaultBranch` | `new-branch`, `sync-main`, `open-pr` | Overrides origin/HEAD detection |
+| `defaultBranch` | `new-branch`, `sync-main`, `open-pr`, `verify` | Overrides origin/HEAD detection |
 | `mergeMethod` | `merge-pr` | `"squash"` / `"merge"` / `"rebase"` — overrides repo-history detection |
-| `branchPrefixes` | `new-branch`, `fix-bug` | Allowed branch name prefixes |
+| `branchPrefixes` | `new-branch`, `fix-bug`, `open-pr` | Allowed branch name prefixes |
 | `coAuthorTrailer` | `commit`, `review-pr` | **Default `false`.** Opt in to an AI co-author commit trailer |
 | `prFooter` | `open-pr` | **Default `false`.** Opt in to a "Generated with Claude Code" PR footer |
 
