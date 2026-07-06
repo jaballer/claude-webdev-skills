@@ -54,6 +54,11 @@ observed results into the PR's Manual test-plan line (see `/webdev:open-pr`):
   files before continuing — a fix made during verification must not dodge the gates that already
   passed on the previous diff.
 
+**Verify must come back clean to proceed.** If its overall result is `failed` — a row still failing
+after the fix-and-recheck cap — **stop here**, exactly as you would on a failing test or lint gate;
+don't carry a change the running app just proved broken into self-review and staging. Only
+`verified`, or `partial` with nothing worse than `needs-human` rows, clears this step.
+
 Skip only for pure refactors, docs, or backend changes fully covered by tests — but then *say*
 it was skipped and why in the Output, don't leave verification silently absent.
 

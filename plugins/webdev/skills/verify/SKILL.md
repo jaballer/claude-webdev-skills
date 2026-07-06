@@ -32,8 +32,9 @@ diff against. Pre-commit (the normal `/webdev:commit` / `/webdev:new-feature` pa
 work alone misses the point — combine: `git diff <base>...HEAD` (committed) **plus** `git diff`
 and `git diff --cached` (working tree / staged), **plus untracked files** — a brand-new
 route/component is still untracked and invisible to `git diff`; list them with `git status
---short` (or `git add -N` so they surface in `git diff`). Post-commit, `git diff <base>...HEAD`
-suffices. From that union, write down each **user-observable behavior** it touches — typically
+--short`, the non-mutating way. (If you instead use `git add -N` so they surface in `git diff`,
+undo it before returning — `git reset -- <paths>` — so Step 5 leaves the index exactly as found.)
+Post-commit, `git diff <base>...HEAD` suffices. From that union, write down each **user-observable behavior** it touches — typically
 3–7 rows:
 
 | # | Behavior | How to reach it | Expected |
