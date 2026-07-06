@@ -16,6 +16,7 @@
 
   "defaultBranch": "main",
   "branchPrefixes": ["feature", "fix", "refactor", "docs", "chore", "review"],
+  "mergeMethod": "squash",
 
   "_comment_attribution": "Both default to false — commits and PRs reflect the human author. Set true to opt in.",
   "coAuthorTrailer": false,

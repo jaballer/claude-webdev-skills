@@ -212,7 +212,8 @@ auto-pushing a 4th.
 - `findings-open` — new findings or a caused-by-us failing check (handled by the loop-back)
 
 Never report "ready to merge" from absence of new comments alone. **Skip the recheck** if the user
-said "ship and move on" or the change is trivial.
+said "ship and move on" or the change is trivial. When the state is `merge-ready`, offer
+`/webdev:merge-pr` — but merging is the user's call, not an automatic next step.
 
 ## Agent Delegation
 If comments span 3+ unrelated files, analyze/fix each file group in a separate sub-agent. Fixes

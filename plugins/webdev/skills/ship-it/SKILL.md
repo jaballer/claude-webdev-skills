@@ -59,8 +59,9 @@ then **invoke `/webdev:review-pr`** to walk through addressing them. Reassure th
 review comments aren't criticism of them — they're how code gets better.
 
 ### 7. Done
-Summarize what shipped in plain language and what happens next (a maintainer merges the PR, or the
-user does once it's approved). Point out one thing they could try on their own next time.
+Summarize what shipped in plain language and what happens next (a maintainer merges the PR, or —
+once it's approved and the user says go — **invoke `/webdev:merge-pr`** to land it safely and
+clean up). Point out one thing they could try on their own next time.
 
 ## Tone
 
