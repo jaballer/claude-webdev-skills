@@ -39,6 +39,28 @@ Two separate steps — run each at Claude Code's main `/` prompt, one at a time:
 Skills are then available namespaced as `/webdev:<name>` (e.g. `/webdev:run-tests`), and
 Claude will also invoke them automatically based on what you ask for.
 
+## Updating
+
+Editing this repo — or merging PRs into it — does **not** update your installed copy. The
+plugin is served from the `jaballer/claude-webdev-skills` GitHub marketplace, so changes have
+to reach `main` there first, then get pulled in. From a terminal:
+
+```bash
+# 1. Refresh the marketplace from GitHub
+claude plugin marketplace update webdev-skills
+
+# 2. Update the plugin to the latest version
+claude plugin update webdev@webdev-skills
+```
+
+The update applies on the next launch, not live — **restart Claude Code**, then confirm with
+`claude plugin list`. You can also manage updates interactively from the `/plugin` menu.
+
+> **Developing locally?** To iterate against your working tree, register the marketplace from a
+> path instead: `claude plugin marketplace add /absolute/path/to/claude-webdev-skills`. It reuses
+> the `webdev-skills` name, so remove the GitHub-sourced one first
+> (`claude plugin marketplace remove webdev-skills`).
+
 ## How it adapts to your stack
 
 1. **Zero config.** On a standard project, `/webdev:detect-stack` reads your lockfile and
