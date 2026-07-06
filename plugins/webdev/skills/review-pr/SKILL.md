@@ -37,13 +37,20 @@ If none resolves, ask.
 ## Step 2: Get onto the PR branch, up to date
 ```bash
 git branch --show-current
+gh pr view <pr_number> --repo <owner>/<repo> --json isCrossRepository,headRefName,headRefOid
 ```
-If it doesn't match the PR head ref: `gh pr checkout <pr_number> --repo <owner>/<repo>`.
-If it does match, still sync: `git fetch origin && git status -sb`, then `git pull --ff-only`.
-If `--ff-only` refuses, stop and surface it — don't auto-rebase.
-**Fork PRs:** if `gh pr view --json isCrossRepository` is true, pushes go to the contributor's
-fork — `gh pr checkout` configures that automatically, but it only works with fork access or
-maintainer-edit permission. Lacking either, stop and report; never push the fix to upstream.
+**Fork PRs first:** if `isCrossRepository` is true, **always run `gh pr checkout <pr_number> --repo
+<owner>/<repo>` — even when the local branch name already matches `headRefName`.** A coincidental
+match (a contributor opens a fork PR from `main` while you're on upstream `main`) would otherwise
+skip checkout, leaving the fork remote unconfigured, so the later pull/push hit *your* branch, not
+the PR head. `gh pr checkout` only works with fork access or maintainer-edit permission; lacking
+either, stop and report — never push the fix to upstream. Confirm the checkout landed on the PR
+head SHA (`headRefOid`).
+
+**Same-repo PRs:** if the current branch doesn't match the head ref,
+`gh pr checkout <pr_number> --repo <owner>/<repo>`. If it matches, still sync:
+`git fetch origin && git status -sb`, then `git pull --ff-only` — if `--ff-only` refuses, stop and
+surface it, don't auto-rebase.
 
 ## Step 3: Fetch all comments + build a tracking list
 ```bash
