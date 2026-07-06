@@ -49,7 +49,10 @@ Match the conventional-commits-style format used in recent merges:
 ```
 
 - **Type** maps from the branch prefix: `feature/`→`feat`, `fix/`→`fix`, `refactor/`→`refactor`,
-  `docs/`→`docs`, `chore/`→`chore`, `review/`→`chore` (unless dominantly one category).
+  `docs/`→`docs`, `chore/`→`chore`, `review/`→`chore` (unless dominantly one category). A project's
+  custom `branchPrefixes` map to the closest conventional type — a bug-fix prefix (`bug/`,
+  `bugfix/`)→`fix`; for any prefix with no clear mapping, pick the type from what the change
+  actually does rather than stalling.
 - **Scope** is the area touched (`auth`, `api`, `ui`, `billing`, …) — match what `gh pr list` shows.
 - **Description** imperative present tense, whole title under ~70 chars.
 - **Issue number** parenthesized at the end if there's an associated issue.
@@ -101,8 +104,13 @@ sets `"prFooter": true` in `.claude/webdev.json`, end the body with:
 
 ## Step 4: Open the PR (heredoc so newlines/special chars survive)
 
+Pass `--base <base>` explicitly — the same default branch resolved in Step 1. Without it,
+`gh pr create` targets the repository's GitHub default branch, so a project that pins a different
+`defaultBranch` (e.g. `develop`/`release`) in `.claude/webdev.json` — the branch `/webdev:new-branch`
+branched from — would get its PR opened against the wrong base.
+
 ```bash
-gh pr create --title "<type>(<scope>): <description> (#<issue>)" --body "$(cat <<'EOF'
+gh pr create --base "<base>" --title "<type>(<scope>): <description> (#<issue>)" --body "$(cat <<'EOF'
 ## Summary
 
 - ...

@@ -23,7 +23,14 @@ the bug happen, you cannot know the fix works — and "it looks right" is how th
 comes back in two weeks. Reproduce first; if you genuinely can't, say so and gather more
 information rather than shipping a speculative patch.
 
-## 0. Branch first
+## 0. Classify, then branch
+
+If the report is unambiguously a bug, branch now. If it's **only an issue reference**
+(`fix issue #N`) or otherwise ambiguous between a defect and a change request, do Step 1's
+classification *first* — read the issue (`gh issue view <n>`) — and branch only once it's
+confirmed bug-shaped. A ticket that turns out to be missing functionality is `/webdev:new-feature`
+work; branching `fix/` before reading it strands you on a fix-prefixed branch that `/webdev:open-pr`
+maps to a `fix:` title for what is actually a feature (re-create the branch if you already made it).
 
 **Invoke `/webdev:new-branch`** with the project's bug-fix prefix — `fix/` by default, but honor
 a `branchPrefixes` override in `.claude/webdev.json` (a project using `bugfix/` or `bug/` means
@@ -113,8 +120,12 @@ not a remembered impression.
 ## 8. Commit and PR
 
 **Invoke `/webdev:commit`** (type `fix:`, `Closes #N` when an issue exists). In the PR body's
-Summary, include the one-sentence root cause and the red → green test — that's what makes a
-bug-fix PR reviewable in one pass.
+Summary, include the one-sentence root cause and the proof — the red → green test, or, on the
+**manual path** where the harness can't reach the bug (visual/third-party per Step 4), the manual
+repro that was re-driven and observed fixed, labeled as manual. For a **speculative fix** (Step 2,
+never reproduced), say so: give the hypothesis you patched and its verification limits, not a
+claimed red → green against a bug you never saw fail. Never describe automated coverage that
+doesn't exist — that's what keeps a bug-fix PR reviewable in one honest pass.
 
 ## Dependency graph
 
@@ -143,10 +154,12 @@ to force a PR out of:
 **Fixed** (reproduced, or speculative with explicit user approval):
 - **Bug**: expected vs actual (one line) · **Reproduced**: how (or "not reproduced —
   speculative fix, user-approved, labeled in the PR")
-- **Root cause**: one sentence, with file:line
+- **Root cause**: one sentence, with file:line — or, for a speculative fix, the **hypothesis**
+  you patched, marked unconfirmed
 - **Proof**: test name + location, confirmed red → green — or, where the harness can't reach
   the bug (visual/third-party per Step 4), "manual verification: <what was re-driven and
-  observed>" stated as such
+  observed>" stated as such — or, for a speculative fix never seen failing, the verification you
+  *could* do (e.g. the new test passes) plus what stays unconfirmed against the real bug
 - **Siblings**: fixed in-commit / follow-ups filed / none found (state which)
 - **Test result**: scope + pass/fail · **Branch** · **Commit SHA** · **PR URL**
 

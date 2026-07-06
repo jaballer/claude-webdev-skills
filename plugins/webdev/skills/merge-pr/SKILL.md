@@ -20,10 +20,15 @@ rather than assuming it, and treats the merge itself as an outward-facing action
 Explicit number/URL if given; otherwise the current branch's PR via
 `gh pr view --json number,url`. If neither resolves, ask.
 
+**If the input is a URL** (or names another repo), parse its `owner/repo` and pass
+`--repo <owner>/<repo>` on **every** `gh pr`/`gh api` command below. A bare `<number>` resolves
+against the current checkout — if that repo has a PR with the same number, the gates and the merge
+would run against the wrong PR. Carry the explicit repo through; don't fall back to a bare number.
+
 ## Step 2: The pre-merge gate — verify, don't assume
 
 ```bash
-gh pr view <number> --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName,title,headRefOid
+gh pr view <number> --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName,headRefName,title,headRefOid
 ```
 
 **Record `headRefOid`** — that SHA is what these gates certify, and Step 4 pins the merge to it.
@@ -37,6 +42,12 @@ Walk every gate; each has a defined stop:
 | Review (`reviewDecision`) | `APPROVED` **and the approval covers the current head** — `reviewDecision` alone can be an approval of an older diff when the repo doesn't dismiss stale reviews. Verify: `gh api graphql` for `reviews(states: APPROVED, last: 10) { nodes { commit { oid } submittedAt } }` and confirm the newest approval's `commit.oid` equals `headRefOid` (or every commit after it is from the approver). Or the repo requires no review | `CHANGES_REQUESTED` → stop, **invoke `/webdev:review-pr`**. `REVIEW_REQUIRED` → stop; a required review can't be merged around. **Approval predates the head** → report "approved, but not on the latest commits" — the user decides (re-request review, or explicitly proceed) |
 | Threads | no unresolved review threads (the reviewThreads GraphQL query in `/webdev:review-pr` step 11 — **paginate**: `reviewThreads(first:100)` caps at 100 per request, so on big PRs follow `pageInfo { hasNextPage endCursor }` until exhausted; an unresolved thread on page 2 is still a gate) | List the open threads; offer `/webdev:review-pr` |
 | Up to date (`mergeStateStatus`) | `CLEAN`, or `HAS_HOOKS` (GitHub Enterprise pre-receive hooks — mergeable with passing status; treat as pass). `UNKNOWN` → GitHub computes this async: re-query after a few seconds rather than failing the gate | `BEHIND` → update the branch (`gh pr update-branch`, or rebase if that's the repo's convention) — **this creates a new head: re-run the ENTIRE gate table against it**, not just checks. The update can invalidate approvals (stale-review dismissal) and changes `headRefOid`, so re-fetch reviewDecision, threads, and the new SHA before merging. `DIRTY` → conflicts; resolve on the branch locally (merge base in, resolve, test, push), never through the web editor blindly |
+
+**Merge-queue bases:** if the PR's base requires a merge queue (Step 4), `BEHIND` is **not** a
+failure to fix here — the queue brings each PR up to date as it lands, and running
+`gh pr update-branch` would rewrite the head, invalidate the approval and checks just verified,
+and can keep the PR from ever being enqueued. Treat a `BEHIND` queue-backed PR as enqueueable and
+go to Step 4's queue path instead of updating the branch.
 
 **No repo-required review + no reviewer signal** — the gate table can pass on a repo with no
 branch protection. State that plainly ("merging unreviewed — the repo doesn't require review")
@@ -76,14 +87,21 @@ the merge is refused instead of landing unverified code — on refusal, go back 
 new head.
 
 **Merge-queue repos:** when the base branch requires a merge queue, the queue owns the merge
-method — don't pass `--squash`/`--merge`/`--rebase`; `gh pr merge <number>` adds the PR to the
-queue instead of merging immediately. Expect `state` to stay `OPEN` while queued: verify by
-watching for `MERGED` (or a queue rejection) rather than assuming, and report "queued" honestly
-if it hasn't landed yet.
+method — don't pass `--squash`/`--merge`/`--rebase`. **Still pin the head:**
+`gh pr merge <number> --match-head-commit <headRefOid>` adds the PR to the queue (omitting only
+the strategy flag), so a push landing after Step 2 is refused rather than enqueued unverified.
+Expect `state` to stay `OPEN` while queued: verify by watching for `MERGED` (or a queue rejection)
+rather than assuming, and report "queued" honestly if it hasn't landed yet.
 
-`--delete-branch` removes the remote branch and switches the local checkout back to base. If
-the local deletion part fails (dirty tree, checked-out elsewhere), the merge itself is done —
-`/webdev:sync-main` in Step 6 cleans up the rest; don't retry the merge.
+**Before `--delete-branch`, check for stacked PRs that depend on this head.** Another open PR
+using this PR's head branch as its base gets **closed, not retargeted**, when the branch is deleted:
+```bash
+gh pr list --state open --base <headRefName> --json number,headRefName   # headRefName from Step 2
+```
+If any exist, omit `--delete-branch` (retarget them to the new base first, or leave the branch for
+the stack). Otherwise `--delete-branch` removes the remote branch and switches the local checkout
+back to base. If the local deletion part fails (dirty tree, checked-out elsewhere), the merge
+itself is done — `/webdev:sync-main` in Step 6 cleans up the rest; don't retry the merge.
 
 ## Step 5: Verify the outcome
 
@@ -104,8 +122,13 @@ predate the merge; report those separately.
 
 ## Step 6: Clean up
 
-**Invoke `/webdev:sync-main`** — pull the merged base, prune remote refs, and (with
-confirmation) delete the merged local branch if `--delete-branch` didn't already.
+If the PR merged into the **default branch**, **invoke `/webdev:sync-main`** — pull the merged
+base, prune remote refs, and (with confirmation) delete the merged local branch if
+`--delete-branch` didn't already. If it merged into a **non-default base** (`baseRefName` is a
+stack or release branch), `/webdev:sync-main` would switch you to `main` and leave that base
+stale — instead switch to and fast-forward the recorded base
+(`git checkout <baseRefName> && git pull --ff-only`), then prune (`git fetch --prune`).
+Sync-main's default-branch contract only fits default-base merges.
 
 ## What NOT to do
 
