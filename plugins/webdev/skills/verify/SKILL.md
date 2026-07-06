@@ -25,11 +25,16 @@ here."
 
 ## Step 1: Build the verification list from the diff
 
-Read the **whole** change under verification. Pre-commit (the normal `/webdev:commit` /
-`/webdev:new-feature` path), committed work alone misses the point — combine:
-`git diff <base>...HEAD` (committed) **plus** `git diff` and `git diff --cached` (working tree /
-staged). Post-commit, `git diff <base>...HEAD` suffices. From that union, write down each
-**user-observable behavior** it touches — typically 3–7 rows:
+Read the **whole** change under verification. `<base>` is the default branch resolved as in
+`/webdev:new-branch` (`.claude/webdev.json` `defaultBranch`, then `origin/HEAD`, then
+`main`/`master`) — for a direct "check it in the browser" run with no caller, that's the ref to
+diff against. Pre-commit (the normal `/webdev:commit` / `/webdev:new-feature` path), committed
+work alone misses the point — combine: `git diff <base>...HEAD` (committed) **plus** `git diff`
+and `git diff --cached` (working tree / staged), **plus untracked files** — a brand-new
+route/component is still untracked and invisible to `git diff`; list them with `git status
+--short` (or `git add -N` so they surface in `git diff`). Post-commit, `git diff <base>...HEAD`
+suffices. From that union, write down each **user-observable behavior** it touches — typically
+3–7 rows:
 
 | # | Behavior | How to reach it | Expected |
 |---|---|---|---|
@@ -39,12 +44,17 @@ staged). Post-commit, `git diff <base>...HEAD` suffices. From that union, write 
 
 Cover: the **happy path**, at least one **error/validation path**, and the **non-default
 context** (logged-out, other role/locale, empty state, mobile viewport) — the same contexts
-`/webdev:plan-inventory` artifact 2 enumerates; reuse its rows if an inventory was run.
+`/webdev:plan-inventory` artifact 2 enumerates. Reuse those **contexts** to design your rows if an
+inventory was run — not artifact 2's rows themselves, which are an execution-context map
+(helper/global, context A/B), not driveable behavior/URL/expected cases.
 
 ## Step 2: Get the app running
 
 - **Check whether it's already running first** — probe the dev URL/port before starting
-  anything; a second instance fighting over the port wastes ten minutes.
+  anything; a second instance fighting over the port wastes ten minutes. But a reachable port
+  isn't proof it's serving *this* checkout — it may be a leftover server from another branch or
+  app. Confirm it's serving the current tree (hit a route/marker unique to the diff, or a
+  build/version stamp) before trusting it; restart it if you can't confirm.
 - If not, start the resolved dev command **in the background**, note that you started it
   (you'll stop it in Step 5), and wait for the ready signal — don't fire requests at a
   server that's still booting.

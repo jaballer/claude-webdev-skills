@@ -148,7 +148,10 @@ review knowledge on top of the generic set above without forking this skill.
 - **Stale references** — examples, "see step N" pointers, snippets that reference the old structure.
 - **Sweep coverage** — fixed pattern X in one file? Grep for X elsewhere.
 
-If the self-review surfaces something, fix it now — same diff, no extra commit.
+If the self-review surfaces something, fix it now — same diff, no extra commit. **If that fix
+changes an observable surface** (UI, route, form, API response), redo step 3½ for the affected
+rows — the verify evidence recorded before this review is now stale, and `/webdev:open-pr`'s
+Manual line must reflect the diff that actually ships.
 
 ## 5. Stage only the right files
 
