@@ -5,14 +5,20 @@ description: >
   inventory (when warranted), implementation, tests, and commit/PR — by chaining the
   atomic webdev skills. Use when building any new feature, endpoint, page, component,
   or integration. Trigger when the user says "add a feature", "build X", "implement Y",
-  "create a new Z", or when starting any non-trivial new functionality. Also useful
-  mid-feature as a checklist to confirm nothing was missed.
+  "create a new Z", or when starting any non-trivial new functionality. NOT for defects:
+  if the request is fixing broken/incorrect existing behavior ("fix the bug", "implement
+  a fix for issue #N", an error report), use /webdev:fix-bug instead — its
+  reproduce-first, failing-test discipline must not be bypassed. Also useful mid-feature
+  as a checklist to confirm nothing was missed.
 ---
 
 # New Feature (orchestrator)
 
 This skill **delegates** to atomic skills rather than re-describing them. Its job is sequencing
 and making sure no phase is skipped. Resolve all project commands via `/webdev:detect-stack`.
+
+> **Bug report, not a feature?** Use `/webdev:fix-bug` instead — the discipline differs
+> (reproduce → failing test → fix), and skipping it is how speculative patches ship.
 
 ## 0. Branch first
 

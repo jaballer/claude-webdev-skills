@@ -7,7 +7,10 @@ description: >
   time work is about to begin and no feature branch exists yet. If the user jumps
   straight into changes without a branch, pause and run this first. Phrases like
   "let's work on X", "can you fix Y", "start on issue #Z", or "I want to add A"
-  are all signals to run this skill.
+  are all signals to run this skill. This skill ONLY creates the branch: for a
+  defect report ("can you fix Y", a broken behavior), branching is step 0 —
+  continue with /webdev:fix-bug afterward; for new functionality, continue with
+  /webdev:new-feature.
 ---
 
 # New Branch
