@@ -50,6 +50,12 @@ agent following each changed instruction literally in the ugly cases (fork PR, d
 no PR yet, >30 review comments, empty state). Where does it stall, contradict itself, or
 dead-end? Fix those before review finds them.
 
+**Bump the version when you change a skill.** Update `version` in
+`plugins/webdev/.claude-plugin/plugin.json` and keep the README `## Skills (vX.Y.Z)` header in
+sync. Installs are served from the marketplace, not this working copy — users pull changes with
+`claude plugin update`, which reports the bump as "updated from X to Y". An unbumped version
+leaves a real change looking like a no-op downstream.
+
 ## Checklist for a PR that adds or changes a skill
 
 - [ ] Frontmatter `description` contains realistic trigger phrases and disambiguates siblings
@@ -57,6 +63,7 @@ dead-end? Fix those before review finds them.
 - [ ] `## Output` contract present and accurate
 - [ ] Any new `webdev.json` key is documented in `examples/webdev.json` and the README key table
 - [ ] README skill table updated (one row per skill)
+- [ ] Plugin `version` bumped in `plugins/webdev/.claude-plugin/plugin.json`, README `## Skills (vX.Y.Z)` header synced
 - [ ] Tool-behavior claims (flags, JSON fields, API shapes) verified against the real tool this session
 - [ ] Blast radius traced: consumers, cross-references, step numbers, README/examples all in sync
 - [ ] Adversarial self-pass done (literal execution in edge cases: forks, detached HEAD, no-PR, pagination)
