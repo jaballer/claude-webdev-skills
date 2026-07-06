@@ -38,17 +38,25 @@ a default-branch run un-findable by branch.
   (`gh pr checks <number> --json name,state,link` — the `/actions/runs/<id>/` segment) or by head
   SHA: `gh run list --commit <head-sha>`. An **external/status check** (a provider posting a
   status, no Actions run) has no run id: follow the check's `link` to the provider for the detail.
-- **Branch-only (no PR):** query the failed run for *this commit*, not a bare recent list —
-  several workflows can share a push and a plain `--limit 5` can miss the red one:
+- **Branch-only (no PR):** first pin down *which* branch is red — the branch the user named, else
+  confirm the current branch is the intended one (don't assume you're already on it). Its `<base>`
+  for the Step 3 pre-existing check is the default branch it would merge into (resolve as in
+  `/webdev:new-branch`). Query that branch's runs and read the **conclusion** rather than filtering
+  on a single status — a red check can be `failure` **or** `timed_out`, `cancelled`,
+  `startup_failure`, `action_required`, and a bare `--limit 5` can miss it when several workflows
+  share a push:
   ```bash
-  gh run list --commit $(git rev-parse HEAD) --status failure --json databaseId,workflowName,conclusion
+  gh run list --branch <red-branch> --limit 20 --json databaseId,workflowName,status,conclusion,headSha
   ```
-  For a branch-only **external/status check** (CircleCI, Buildkite — not an Actions run, so
-  `gh run list` never shows it), read the commit's statuses/check-runs directly:
-  `gh api repos/<owner>/<repo>/commits/$(git rev-parse HEAD)/status` and `.../check-runs`, then
-  follow the provider link — or open a PR so `gh pr checks` surfaces it.
+  Pick the run on the branch tip whose `conclusion` is not `success`/`skipped`. For a branch-only
+  **external/status check** (CircleCI, Buildkite — not an Actions run, so `gh run list` never shows
+  it), read the commit's statuses/check-runs directly:
+  `gh api repos/<owner>/<repo>/commits/<sha>/status` and `.../check-runs`, then follow the provider
+  link — or open a PR so `gh pr checks` surfaces it.
 
-Then pull only the failure: `gh run view <run-id> --log-failed`.
+Then, **for a GitHub Actions run**, pull only the failure: `gh run view <run-id> --log-failed`
+(`gh run view` reads Actions runs only — an external/status check has no run id, so stay on its
+provider link/API from above).
 
 **Now get onto the branch where the fix belongs.**
 - **PR:** check out its head — `gh pr checkout <number>` (already on it? still sync:
@@ -147,7 +155,9 @@ transient: wait ~20–30s (or `ScheduleWakeup`) and retry a couple of times befo
 checks are genuinely absent.
 
 **Branch-only (no PR number):** several workflows can run on one commit, so select the Step 1
-workflow explicitly rather than watching the first run that comes back:
+workflow explicitly rather than watching the first run that comes back. Actions can take a few
+seconds to register after a push — if the list comes back empty, retry with the same bounded wait
+as the PR path (~20–30s, a couple of times) before concluding no run started:
 ```bash
 gh run list --commit $(git rev-parse HEAD) --workflow "<workflow-name>" --json databaseId,conclusion
 gh run watch <run-id> --exit-status
