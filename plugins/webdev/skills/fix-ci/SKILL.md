@@ -24,33 +24,43 @@ Green is a consequence of correct code, not the goal itself. Never:
 - edit the workflow to remove or soften the failing step
 - push empty commits or spam reruns hoping for a different answer
 
-## Step 1: Get onto the failing branch, then locate the run
+## Step 1: Guard the worktree, locate the run, then get onto the failing branch
 
-**Fix where the failure lives.** With a PR: check out its head first — `gh pr checkout <number>`
-(already on it? still sync: `git fetch && git pull --ff-only`). Skipping this means Step 5's fix
-lands on whatever branch happens to be checked out while the red PR never changes. On a **fork
-(cross-repository) PR**, `gh pr checkout` wires pushes to the contributor's fork — that needs
-fork access or maintainer-edit permission; lacking it, stop and report rather than pushing
-anywhere else. Without a PR: confirm `git branch --show-current` is the branch whose CI is red —
-and if that red branch is the **default branch** (e.g. a post-merge deploy failure handed over
-from `/webdev:merge-pr`), don't fix on it: **invoke `/webdev:new-branch`** (`fix/` prefix) first;
-the fix still lands through a PR.
+**First, don't move over dirty state.** This step changes branches; uncommitted edits would ride
+along onto the PR/fix branch and get swept into the CI-fix commit. Run `git status --short` — if
+it's non-empty, stash (`git stash push -u`) or stop, the same guard `/webdev:new-branch` uses.
 
-Then locate the failure: `gh pr checks <number>` (add `--repo <owner>/<repo>` if needed), or
-branch-only: `gh run list --branch <branch> --limit 5`.
+**Locate the failing run before switching branches** — capture its id, workflow, and job now,
+while the red ref is still checked out or directly queryable. Branching first (below) would leave
+a default-branch run un-findable by branch.
+- **With a PR:** `gh pr checks <number>` (add `--repo <owner>/<repo>` if needed). `gh pr checks`
+  **does not expose a run id** — for a GitHub Actions check, derive it from the check's `link`
+  (`gh pr checks <number> --json name,state,link` — the `/actions/runs/<id>/` segment) or by head
+  SHA: `gh run list --commit <head-sha>`. An **external/status check** (a provider posting a
+  status, no Actions run) has no run id: follow the check's `link` to the provider for the detail.
+- **Branch-only (no PR):** query the failed run for *this commit*, not a bare recent list —
+  several workflows can share a push and a plain `--limit 5` can miss the red one:
+  ```bash
+  gh run list --commit $(git rev-parse HEAD) --status failure --json databaseId,workflowName,conclusion
+  ```
+  For a branch-only **external/status check** (CircleCI, Buildkite — not an Actions run, so
+  `gh run list` never shows it), read the commit's statuses/check-runs directly:
+  `gh api repos/<owner>/<repo>/commits/$(git rev-parse HEAD)/status` and `.../check-runs`, then
+  follow the provider link — or open a PR so `gh pr checks` surfaces it.
 
-`gh pr checks` **does not expose a run id** — for a GitHub Actions check, derive it from the
-check's `link` field (`gh pr checks <number> --json name,state,link` — the `/actions/runs/<id>/`
-path segment) or by head SHA: `gh run list --commit $(git rev-parse HEAD)`. Then pull only the
-failure:
-```bash
-gh run view <run-id> --log-failed
-```
-An **external/status check** (a provider posting a status — no Actions run exists) has no run id
-at all: follow the check's `link` to the provider's page for the failure detail instead.
+Then pull only the failure: `gh run view <run-id> --log-failed`.
 
-Note the workflow, job, and step that failed, and **keep the run id / check name** — the recheck
-in Step 7 re-checks exactly these.
+**Now get onto the branch where the fix belongs.**
+- **PR:** check out its head — `gh pr checkout <number>` (already on it? still sync:
+  `git fetch && git pull --ff-only`). On a **fork (cross-repository) PR**, `gh pr checkout` wires
+  pushes to the contributor's fork — that needs fork access or maintainer-edit permission; lacking
+  it, stop and report rather than pushing anywhere else.
+- **Branch-only:** confirm `git branch --show-current` is the red branch. If it's the **default
+  branch** (e.g. a post-merge deploy failure handed over from `/webdev:merge-pr`), don't fix on it
+  — **invoke `/webdev:new-branch`** (`fix/` prefix) now that the run id is already captured above;
+  the fix still lands through a PR.
+
+**Keep the run id, workflow, job, and check name** — the recheck in Step 7 re-checks exactly these.
 
 ## Step 2: Find the first real error
 
@@ -80,10 +90,15 @@ type; it determines the fix path:
   failed logs too (`gh run view <base-run-id> --log-failed`) and compare root causes. Same error
   at the same step → pre-existing; base red for a *different* reason does not clear this branch's
   failure. For a genuine pre-existing failure, **don't fold a base fix into this PR** — report it,
-  and offer a separate `fix/` branch off base (via `/webdev:new-branch`).
+  and offer a separate `fix/` branch off *that* base: if the PR's base is the default branch,
+  `/webdev:new-branch` handles it; if it's a non-default line (`release/1.x`, `develop`), branch
+  from it directly (`git checkout <base> && git pull --ff-only && git checkout -b fix/<desc>`),
+  since `/webdev:new-branch` always branches from the default branch.
 - **Flake / infra** — matches the infra row above and doesn't reference project code. **One**
-  rerun is allowed: `gh run rerun <run-id> --failed`. If the same failure repeats, it's real —
-  reclassify and stop calling it a flake.
+  rerun is allowed: `gh run rerun <run-id> --failed`, then **wait for that attempt and read its
+  conclusion** (`gh run watch <run-id> --exit-status`, or `gh run view <run-id> --json conclusion`)
+  — enqueueing a rerun isn't a result. If the same failure repeats, it's real — reclassify and
+  stop calling it a flake.
 
 ## Step 4: Reproduce locally before fixing
 
@@ -115,20 +130,32 @@ the user's time.
 
 ## Step 6: Commit and push
 
-**Invoke `/webdev:commit`**. If a PR already exists, skip its open-pr step; on the branch-only
-path there is no PR — ask whether to open one now (usually yes, so the fix and its CI status land
-somewhere reviewable). Use the type the fix actually is (`fix:`, `test:`, `chore(deps):`, `ci:`
-for workflow-file changes).
+**Invoke `/webdev:commit`** — on a fork PR its push step (step 8) targets the contributor's fork
+head, not upstream, matching the fork checkout from Step 1; if the fork isn't writable it stops
+rather than stranding the fix on the base repo. If a PR already exists, skip its open-pr step; on
+the branch-only path there is no PR — ask whether to open one now (usually yes, so the fix and its
+CI status land somewhere reviewable). Use the type the fix actually is (`fix:`, `test:`,
+`chore(deps):`, `ci:` for workflow-file changes).
 
 ## Step 7: Watch the checks — and react to what comes back
 
-Re-check the same workflow/job from Step 1. With a PR: `gh pr checks <number> --watch`.
-Branch-only (no PR number): find the run for the pushed commit —
-`gh run list --branch <branch> --commit $(git rev-parse HEAD)` — then
-`gh run watch <run-id> --exit-status`. The `--exit-status` matters: without it `gh run watch`
-exits 0 even when the run fails, and "the command succeeded" gets misread as green. If in doubt,
-confirm the conclusion explicitly: `gh run view <run-id> --json conclusion`.
-Either way, waiting ~3 min via `ScheduleWakeup` and re-checking also works — don't busy-poll.
+Re-check the **same workflow/job from Step 1**, not just any run on the commit.
+
+**With a PR:** `gh pr checks <number> --watch`. Right after a push GitHub can briefly report **no
+checks** for the new head SHA before they register — treat a "no checks reported" error as
+transient: wait ~20–30s (or `ScheduleWakeup`) and retry a couple of times before concluding the
+checks are genuinely absent.
+
+**Branch-only (no PR number):** several workflows can run on one commit, so select the Step 1
+workflow explicitly rather than watching the first run that comes back:
+```bash
+gh run list --commit $(git rev-parse HEAD) --workflow "<workflow-name>" --json databaseId,conclusion
+gh run watch <run-id> --exit-status
+```
+`--exit-status` matters: without it `gh run watch` exits 0 even when the run fails, and "the
+command succeeded" gets misread as green. If in doubt, confirm explicitly:
+`gh run view <run-id> --json conclusion`. Waiting ~3 min via `ScheduleWakeup` and re-checking also
+works — don't busy-poll.
 
 - **Green** → done.
 - **Same failure** → the fix didn't address the cause. Back to Step 2 with the fresh logs —
