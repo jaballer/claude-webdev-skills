@@ -84,9 +84,12 @@ local compiler, not a global one — bare `tsc` isn't on PATH when TypeScript is
 **Migration status** (only when the framework has migrations). Same rule — resolve through the
 project runner, since bare `manage.py` or a global `prisma` fails outside an activated env:
 - Laravel: `php artisan migrate:status` · Django: `python manage.py showmigrations` (via
-  `poetry run`/`uv run` when that's the manager) · Rails: `rails db:migrate:status` ·
-  standalone tools via the manager's exec form (`pnpm exec prisma migrate status`,
-  `poetry run alembic current`) when their config is present. Otherwise N/A.
+  `poetry run`/`uv run` when that's the manager) · Rails: `bin/rails db:migrate:status` (the
+  app binstub — bare `rails` isn't on PATH when the gem is Bundler-managed; `bundle exec rails
+  db:migrate:status` also works) · standalone tools via the manager's exec form
+  (`pnpm exec prisma migrate status`; Alembic has no single status command — compare
+  `poetry run alembic current` against `alembic heads`, which differ when revisions are
+  unapplied) when their config is present. Otherwise N/A.
 
 **Framework** (informs conventions, scaffolding, where files live):
 - JS/TS: deps in `package.json` — `next`, `nuxt`, `@remix-run`, `astro`, `svelte`/`@sveltejs/kit`, `vite`, `react`, `vue`, `express`, `@nestjs`.
@@ -100,7 +103,8 @@ project runner, since bare `manage.py` or a global `prisma` fails outside an act
 Resolve the profile for the package containing the files in scope (nearest `package.json` up the
 tree); if the scope is unclear, list the workspace packages and ask which one applies. Prefer the
 repo's task runner over `cd` — via the manager's exec form, since `turbo`/`nx` are usually
-devDependencies not on PATH: `pnpm exec turbo run test`, `npm exec nx -- test <project>`,
+devDependencies not on PATH, and scope the run to the package in scope rather than the whole
+repo: `pnpm exec turbo run test --filter=<pkg>`, `npm exec nx -- test <project>`,
 `pnpm --filter <pkg> test`.
 
 ### 3. When detection is ambiguous
