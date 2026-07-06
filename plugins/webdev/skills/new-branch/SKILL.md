@@ -18,11 +18,13 @@ up-to-date default branch.
 ## Steps
 
 1. **Resolve the default branch** (don't assume `main`)
-   ```bash
-   git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@'
-   ```
-   Falls back to `main` then `master` if origin/HEAD isn't set. A project can pin
-   `"defaultBranch"` in `.claude/webdev.json` to override. Call the result `<base>` below.
+
+   Precedence, highest first — an explicit pin always beats detection:
+   1. `"defaultBranch"` in `.claude/webdev.json` (a repo pinning `develop`/`release` means it)
+   2. `git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@'`
+   3. `main`, then `master`
+
+   Call the result `<base>` below.
 
 2. **Check the current branch**
    ```bash
@@ -32,6 +34,19 @@ up-to-date default branch.
    want a fresh branch anyway, or may be mid-task on existing work.
 
 3. **Switch to base and pull latest (fast-forward only)**
+
+   First check for uncommitted work — don't switch branches over a dirty tree silently:
+   ```bash
+   git status --short
+   ```
+   If non-empty, say what's there and ask: **carry it onto the new branch** (fine when the
+   work-in-progress belongs to the new task — git carries it through the checkouts unless files
+   conflict), or **stash it** (`git stash push -u` — the `-u` matters: plain `git stash push`
+   leaves untracked `??` files in the tree). For a stash, ask one more thing: does the WIP
+   belong to the NEW task? If yes, pop after branching. If it's unrelated, **leave it stashed**
+   — popping onto the new branch would put it right back in the diff, where commit's staging
+   step can sweep it into the wrong PR. Never stash or discard without asking.
+
    ```bash
    git checkout <base> && git pull --ff-only
    ```

@@ -53,11 +53,23 @@ Claude will also invoke them automatically based on what you ask for.
   "test":   "pnpm test",
   "format": "pnpm run format",
   "dev":    "pnpm dev",
-  "branchPrefixes": ["feature", "fix", "refactor", "docs", "chore"]
+  "branchPrefixes": ["feature", "fix", "refactor", "docs", "chore", "review"]
 }
 ```
 
-## Skills (v1.0.0)
+**All supported keys** (pin any subset; the rest is detected):
+
+| Key | Used by | Meaning |
+|---|---|---|
+| `packageManager`, `install`, `test`, `format`, `lint`, `typecheck`, `dev`, `build` | all command-running skills | The resolved commands |
+| `commandPrefix` | all command-running skills | Prepended to **detected** commands only (e.g. `ddev exec`); pinned commands are used verbatim — write them complete, prefix included |
+| `migrationStatus` | `qa-review` | Migration-status command, if the stack has one |
+| `defaultBranch` | `new-branch`, `sync-main`, `open-pr` | Overrides origin/HEAD detection |
+| `branchPrefixes` | `new-branch` | Allowed branch name prefixes |
+| `coAuthorTrailer` | `commit`, `review-pr` | **Default `false`.** Opt in to an AI co-author commit trailer |
+| `prFooter` | `open-pr` | **Default `false`.** Opt in to a "Generated with Claude Code" PR footer |
+
+## Skills (v1.1.0)
 
 **Getting started**
 
@@ -87,7 +99,7 @@ Claude will also invoke them automatically based on what you ask for.
 |---|---|
 | `/webdev:review-pr` | Addresses PR review comments (any bot or human) end to end: verify → sweep → fix → test → commit → reply → resolve threads → wait-and-recheck. Silence ≠ approval. |
 | `/webdev:post-merge-review` | Deep-dive review of a single merged PR — completeness, tests, security, docs, with a verdict. |
-| `/webdev:qa-review` | Broad audit of all recently merged work on a `review/` branch, with parallel sub-agents and a blocker summary. |
+| `/webdev:qa-review` | Broad audit of all recently merged work, with parallel sub-agents and a blocker summary; fixes (if any) land on a `review/` branch. |
 
 > **Two project extension hooks** let a repo layer its own knowledge on top without forking a
 > skill: `commit`'s self-review reads `.claude/bug-classes.md` (codebase-specific bug classes),
@@ -103,8 +115,10 @@ Claude will also invoke them automatically based on what you ask for.
 
 ## Roadmap
 
-The core is complete (v1.0.0). Possible future additions: optional integrations
-(e.g. a Sentry-issue-fix skill), and a `compare`/changelog skill for release notes.
+The core is complete. Planned next skills, roughly in order: `fix-ci` (triage a red PR check
+via `gh run`), `fix-bug` (reproduce → failing test → fix orchestrator), `merge-pr` (verify
+approvals + checks, merge, chain to `sync-main`), `verify` (manual in-browser verification for
+UI work), `update-deps`, and a `compare`/changelog skill for release notes.
 
 ## Conventions (house style)
 

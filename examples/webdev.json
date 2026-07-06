@@ -1,15 +1,23 @@
 {
-  "_comment": "Drop this at .claude/webdev.json in any project to pin commands explicitly. Any key here overrides auto-detection. Delete keys you want detected automatically. This example mirrors a KrateCMS-style DDEV + Laravel setup.",
+  "_comment": "Drop this at .claude/webdev.json in any project to pin commands explicitly. Any key here overrides auto-detection. Delete keys you want detected automatically. This example mirrors a DDEV + Laravel setup. This file shows EVERY supported key — real projects should keep only the ones they need to pin. NOTE: pinned commands are used verbatim; commandPrefix applies only to DETECTED commands, so write pinned commands complete (prefix included) as below.",
 
   "packageManager": "composer",
   "commandPrefix": "ddev exec",
 
-  "install": "ddev composer install",
-  "test":    "ddev exec ./vendor/bin/phpunit",
-  "format":  "ddev exec ./vendor/bin/pint",
-  "lint":    "ddev exec ./vendor/bin/pint --test",
-  "dev":     "ddev start",
-  "build":   "ddev exec npm run build",
+  "install":   "ddev composer install",
+  "test":      "ddev exec ./vendor/bin/phpunit",
+  "format":    "ddev exec ./vendor/bin/pint",
+  "lint":      "ddev exec ./vendor/bin/pint --test",
+  "typecheck": "ddev exec ./vendor/bin/phpstan analyse",
+  "dev":       "ddev start",
+  "build":     "ddev exec npm run build",
 
-  "branchPrefixes": ["feature", "fix", "refactor", "docs", "chore", "review"]
+  "migrationStatus": "ddev artisan migrate:status",
+
+  "defaultBranch": "main",
+  "branchPrefixes": ["feature", "fix", "refactor", "docs", "chore", "review"],
+
+  "_comment_attribution": "Both default to false — commits and PRs reflect the human author. Set true to opt in.",
+  "coAuthorTrailer": false,
+  "prFooter": false
 }

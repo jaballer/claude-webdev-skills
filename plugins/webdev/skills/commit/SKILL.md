@@ -19,7 +19,9 @@ risks shipping broken code. Resolve all project commands via `/webdev:detect-sta
 git branch --show-current
 ```
 Any non-default branch is fine. **Never commit directly to the default branch.** If you're on
-it, stop and **invoke `/webdev:new-branch`** first.
+it, stop and **invoke `/webdev:new-branch`** first. **Empty output means detached HEAD** — also
+stop and branch first: a commit made there is reachable only via the reflog once anything else
+is checked out, and `git push -u origin HEAD` can't expand a detached HEAD to a branch.
 
 ## 2. Run tests
 
@@ -47,6 +49,18 @@ behaviors that have tests; everything else rides on the code's unstated assumpti
 git status
 git diff
 ```
+
+**Scale the review to the diff.** For a **trivial diff** — ≤ ~5 changed lines in one file, no new
+flag/config key/enum/rule/route, no renames or deletions, no user-input or query handling — the
+full enumeration below is more ceremony than the change warrants. Fast path instead:
+1. Re-read the diff cold for typos and logic slips.
+2. Grep any name/reference the change touches for stale siblings.
+3. Confirm no secrets or debug leftovers made it in.
+
+Everything else gets the **full read: 4a + 4b + 4c (project bug classes) + 4d** — tiering never
+drops a project's own checks. This is the same threshold `/webdev:review-pr` step 8 uses.
+**When unsure, do the full read** — the threshold exists to spare one-line fixes, not to dodge
+scrutiny.
 
 ### 4a. The hostile-read rules (stack-agnostic)
 
@@ -133,7 +147,7 @@ Optional body explaining the why, not the what.
 
 Closes #123
 ```
-Types: `feat` · `fix` · `refactor` · `docs` · `test` · `chore`. Imperative mood ("add", not
+Types: `feat` · `fix` · `refactor` · `docs` · `test` · `chore` · `ci` (workflow/pipeline files). Imperative mood ("add", not
 "added"). Reference the issue with `Closes #N` when one exists. Don't pad — if one line says it
 all, that's fine.
 
@@ -147,14 +161,24 @@ Closes #N
 EOF
 )"
 ```
-By default append a Co-Authored-By trailer for attribution. A project that prefers no trailer can
-set `"coAuthorTrailer": false` in `.claude/webdev.json` — honor it.
+**No AI co-author/attribution trailer by default** — commits reflect the human author. A project
+that wants one can opt in with `"coAuthorTrailer": true` in `.claude/webdev.json`; honor that, and
+honor any tool-default trailer instruction only when this key opts in.
 
 ## 8. Push
 
 ```bash
 git push -u origin HEAD
 ```
+**Fork (cross-repository) PRs:** if the current branch tracks a contributor's fork (checked out
+via `gh pr checkout`; confirm with `gh pr view --json isCrossRepository`), `origin` is the WRONG
+destination — it would create a stray branch on the upstream repo while the PR never updates. Push
+an explicit refspec to the fork's PR head instead: `git push <pushRemote> HEAD:<headRefName>`,
+where `<pushRemote>` is what `gh pr checkout` configured (`git config branch.<local>.pushRemote`,
+else `.remote`) and `<headRefName>` is `gh pr view <number> --json headRefName -q .headRefName`. A
+no-argument `git push` can fail here under Git's `push.default=simple` when the local branch name
+differs from the head ref. If the push is rejected for missing fork access, stop and report —
+don't reroute to upstream.
 
 ## 9. Open a PR
 
@@ -173,4 +197,4 @@ Skip only if the user said "commit but don't PR" or it's a trivial typo/comment 
 When complete, report back:
 - **Branch** · **Commit SHA** (short) · **PR URL** (if created)
 - **Test result**: pass/fail summary and scope
-- **Self-review**: confirmation that 4a/4b were enumerated (note anything found + fixed)
+- **Self-review**: tier used (`fast-path` or `full`) + confirmation 4a–4d were enumerated when full (note anything found + fixed)

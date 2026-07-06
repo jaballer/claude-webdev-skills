@@ -13,9 +13,12 @@ description: >
 Comprehensive audit of recently merged functionality to catch bugs, gaps, inconsistencies, and
 improvement opportunities. Resolve project commands via `/webdev:detect-stack`.
 
-## Step 1: Create a review branch
-**Invoke `/webdev:new-branch`** with a `review/` prefix (e.g. `review/qa-auth-flow`). Don't proceed
-without a confirmed branch.
+## Step 1: Get onto the up-to-date base (no branch yet)
+The audit itself (Steps 2–8) is **read-only** — don't create a branch for it. But it must read
+what's actually merged: **invoke `/webdev:sync-main`** first, which checks the working tree,
+switches to the default branch, and fast-forwards it. Auditing from a stale local base misses
+exactly the recent merges this skill exists to review. A branch is created only in Step 9, and
+only if fixes are actually needed — a clean audit should leave no stray `review/*` branch behind.
 
 ## Step 2: Identify what was recently merged (parallel)
 ```bash
@@ -38,7 +41,7 @@ failures as findings — don't fix yet (Step 9).
 
 ## Step 5: Smoke test with static analysis
 Run the resolved checks that apply to the stack:
-- **Build / type-check** — resolved build or type-checker; confirm it compiles.
+- **Build / type-check** — resolved build and type-check commands (per `/webdev:detect-stack`); confirm it compiles.
 - **Lint / format check** — resolved lint in check mode (`eslint`, `biome check`, `pint --test`, `ruff check`).
 - **Framework integrity** — route/view/config compile check if the framework offers one.
 
@@ -46,7 +49,7 @@ Run the resolved checks that apply to the stack:
 non-obvious *why*, and empty/redundant docblocks. Surface in Style / Consistency Issues if present.
 
 ## Step 6: Database concerns
-Check the resolved migration-status command (e.g. migrations applied/pending). Are new migrations
+Run the resolved migration-status command from `/webdev:detect-stack` (skip if N/A for the stack). Are new migrations
 reversible? Proper indexes on frequently-queried columns? Correct foreign-key constraints?
 
 ## Step 7: Documentation alignment
@@ -66,9 +69,22 @@ coverage gaps); **Sub-agent 3** = Steps 5–7 (static analysis, DB, docs). Merge
 - **Summary** — overall: merge-ready for production, or are there blockers?
 
 ## Step 9: Fix or flag
-- **Quick fixes** (typos, imports, style): apply directly on the review branch.
-- **Substantive issues**: describe clearly; let the user decide. After fixes, **invoke
-  `/webdev:run-tests`** (targeted) to confirm nothing broke. Commit via `/webdev:commit`.
+
+**First, leave the base clean.** Steps 4–6 can write generated files onto the default branch
+(coverage reports, test snapshots, compiled assets, schema dumps) even though the audit is
+read-only in intent. Run `git status --short`: if regenerable audit artifacts appear, restore
+tracked files (`git restore <paths>`) and remove untracked ones (preview with `git clean -nd`,
+then `git clean -fd <paths>`) so the base is exactly as found. Otherwise they either leave the
+default branch dirty (clean-audit path) or get swept into the fix commit (fix path).
+
+- **Before applying ANY fix** — quick or substantive — **invoke `/webdev:new-branch`** with a
+  `review/` prefix (e.g. `review/qa-auth-flow`). The audit ran on the default branch; edits must not.
+- **Quick fixes** (typos, imports, style): apply on that branch.
+- **Substantive issues**: describe clearly; let the user decide — if they say fix, same branch.
+- After fixes, **invoke `/webdev:run-tests`** (targeted) to confirm nothing broke. Commit via
+  `/webdev:commit`.
+- **No fixes needed**: report and stop — the base is already restored to clean above, so no branch
+  was created and nothing is left behind.
 
 ## Notes
 - This is a review, not a rewrite — don't refactor working code or add features.

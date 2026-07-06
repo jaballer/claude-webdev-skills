@@ -87,16 +87,22 @@ that visual verification was manual.
 ### 4 — Follow-ups (optional)
 Issues filed, deferred work, or known limitations. Only include if real; don't pad.
 
-### Footer
-End the body with:
+### Footer (opt-in only)
+**No AI-attribution footer by default** — the PR reflects the human author. Only if the project
+sets `"prFooter": true` in `.claude/webdev.json`, end the body with:
 ```markdown
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
 
 ## Step 4: Open the PR (heredoc so newlines/special chars survive)
 
+Pass `--base <base>` explicitly — the same default branch resolved in Step 1. Without it,
+`gh pr create` targets the repository's GitHub default branch, so a project that pins a different
+`defaultBranch` (e.g. `develop`/`release`) in `.claude/webdev.json` — the branch `/webdev:new-branch`
+branched from — would get its PR opened against the wrong base.
+
 ```bash
-gh pr create --title "<type>(<scope>): <description> (#<issue>)" --body "$(cat <<'EOF'
+gh pr create --base "<base>" --title "<type>(<scope>): <description> (#<issue>)" --body "$(cat <<'EOF'
 ## Summary
 
 - ...
@@ -104,8 +110,6 @@ gh pr create --title "<type>(<scope>): <description> (#<issue>)" --body "$(cat <
 ## Test plan
 
 - [x] ...
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
 )"
 ```

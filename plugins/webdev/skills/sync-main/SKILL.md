@@ -13,8 +13,9 @@ description: >
 # Sync Main
 
 Get back to a known-good baseline on the default branch so the next task starts clean.
-Resolve the default branch the same way `/webdev:new-branch` does (origin/HEAD, then
-`.claude/webdev.json` `"defaultBranch"`, falling back to `main`/`master`). Call it `<base>`.
+Resolve the default branch the same way `/webdev:new-branch` does (`.claude/webdev.json`
+`"defaultBranch"` first — a pin beats detection — then origin/HEAD, falling back to
+`main`/`master`). Call it `<base>`.
 
 ## When NOT to use
 
