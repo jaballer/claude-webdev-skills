@@ -172,9 +172,13 @@ git push -u origin HEAD
 ```
 **Fork (cross-repository) PRs:** if the current branch tracks a contributor's fork (checked out
 via `gh pr checkout`; confirm with `gh pr view --json isCrossRepository`), `origin` is the WRONG
-destination — it would create a stray branch on the upstream repo while the PR never updates.
-Use plain `git push` (no remote argument) so git honors the pushRemote `gh` configured; if the
-push is rejected for missing fork access, stop and report — don't reroute to upstream.
+destination — it would create a stray branch on the upstream repo while the PR never updates. Push
+an explicit refspec to the fork's PR head instead: `git push <pushRemote> HEAD:<headRefName>`,
+where `<pushRemote>` is what `gh pr checkout` configured (`git config branch.<local>.pushRemote`,
+else `.remote`) and `<headRefName>` is `gh pr view <number> --json headRefName -q .headRefName`. A
+no-argument `git push` can fail here under Git's `push.default=simple` when the local branch name
+differs from the head ref. If the push is rejected for missing fork access, stop and report —
+don't reroute to upstream.
 
 ## 9. Open a PR
 
