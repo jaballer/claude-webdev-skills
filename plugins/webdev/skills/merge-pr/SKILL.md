@@ -20,10 +20,13 @@ rather than assuming it, and treats the merge itself as an outward-facing action
 Explicit number/URL if given; otherwise the current branch's PR via
 `gh pr view --json number,url`. If neither resolves, ask.
 
-**If the input is a URL** (or names another repo), parse its `owner/repo` and pass
-`--repo <owner>/<repo>` on **every** `gh pr`/`gh api` command below. A bare `<number>` resolves
-against the current checkout — if that repo has a PR with the same number, the gates and the merge
-would run against the wrong PR. Carry the explicit repo through; don't fall back to a bare number.
+**If the input is a URL** (or names another repo), parse its `owner/repo` and target it explicitly
+on **every** command below — `--repo <owner>/<repo>` for `gh pr`/`gh repo`, and for `gh api` (which
+has **no** `--repo` flag) put `<owner>/<repo>` in the REST path and pass `-f owner=<owner> -f
+repo=<repo>` to the GraphQL gates (or export `GH_REPO=<owner>/<repo>`). A bare `<number>`, or a
+`gh api` call left to infer the repo, resolves against the current checkout — if that repo has a PR
+with the same number, the gates and the merge would run against the wrong PR. Don't fall back to a
+bare number.
 
 ## Step 2: The pre-merge gate — verify, don't assume
 
@@ -39,7 +42,7 @@ Walk every gate; each has a defined stop:
 |---|---|---|
 | State | `OPEN`, not a draft | Draft → stop; ask if it should be marked ready first |
 | Checks (`statusCheckRollup`) | all green | Failing → stop, **invoke `/webdev:fix-ci`**. Pending → wait (`gh pr checks --watch` or a `ScheduleWakeup` recheck), don't merge ahead of CI |
-| Review (`reviewDecision`) | `APPROVED` **and the approval covers the current head** — `reviewDecision` alone can be an approval of an older diff when the repo doesn't dismiss stale reviews. Verify: `gh api graphql` for `reviews(states: APPROVED, last: 10) { nodes { commit { oid } submittedAt } }` and confirm the newest approval's `commit.oid` equals `headRefOid` (or every commit after it is from the approver). Or the repo requires no review | `CHANGES_REQUESTED` → stop, **invoke `/webdev:review-pr`**. `REVIEW_REQUIRED` → stop; a required review can't be merged around. **Approval predates the head** → report "approved, but not on the latest commits" — the user decides (re-request review, or explicitly proceed) |
+| Review (`reviewDecision`) | `APPROVED` **and the approval covers the current head** — `reviewDecision` alone can be an approval of an older diff when the repo doesn't dismiss stale reviews. Verify: `gh api graphql` for `reviews(states: APPROVED, last: 10) { nodes { commit { oid } submittedAt } }` and confirm the newest approval's `commit.oid` equals `headRefOid`. Later commits — **even ones authored by the approver** — mean the head itself was never reviewed (pushing isn't reviewing), so treat that as approval-predating-head, not a pass. Or the repo requires no review | `CHANGES_REQUESTED` → stop, **invoke `/webdev:review-pr`**. `REVIEW_REQUIRED` → stop; a required review can't be merged around. **Approval predates the head** → report "approved, but not on the latest commits" — the user decides (re-request review, or explicitly proceed) |
 | Threads | no unresolved review threads (the reviewThreads GraphQL query in `/webdev:review-pr` step 11 — **paginate**: `reviewThreads(first:100)` caps at 100 per request, so on big PRs follow `pageInfo { hasNextPage endCursor }` until exhausted; an unresolved thread on page 2 is still a gate) | List the open threads; offer `/webdev:review-pr` |
 | Up to date (`mergeStateStatus`) | `CLEAN`, or `HAS_HOOKS` (GitHub Enterprise pre-receive hooks — mergeable with passing status; treat as pass). `UNKNOWN` → GitHub computes this async: re-query after a few seconds rather than failing the gate | `BEHIND` → update the branch (`gh pr update-branch`, or rebase if that's the repo's convention) — **this creates a new head: re-run the ENTIRE gate table against it**, not just checks. The update can invalidate approvals (stale-review dismissal) and changes `headRefOid`, so re-fetch reviewDecision, threads, and the new SHA before merging. `DIRTY` → conflicts; resolve on the branch locally (merge base in, resolve, test, push), never through the web editor blindly |
 
@@ -59,7 +62,11 @@ what's being overridden.
 ## Step 3: Pick the merge method
 
 Always fetch what the repo allows first:
-`gh repo view --json squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed`. Then:
+`gh repo view --json squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed`. **Also check the
+base branch's protection** — a base with *Require linear history* rejects merge commits even when
+`mergeCommitAllowed` is true repo-wide (`gh api repos/<owner>/<repo>/branches/<base>/protection`
+→ `required_linear_history.enabled`, or the equivalent ruleset). Rule out `merge` there now, rather
+than discovering it as a `gh pr merge` failure after all gates and confirmation. Then:
 1. `"mergeMethod"` in `.claude/webdev.json` (`"squash"` | `"merge"` | `"rebase"`) — authoritative,
    **but validate it against the allowed methods**: a stale/copied pin the repo forbids stops
    here with the mismatch ("webdev.json pins rebase; repo allows squash only"), before any
