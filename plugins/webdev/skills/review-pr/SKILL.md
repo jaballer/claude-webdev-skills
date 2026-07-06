@@ -83,12 +83,14 @@ codebase's conventions** (read `CLAUDE.md` if present). Work through all fixes b
 ## Step 7: Run tests
 **Invoke `/webdev:run-tests`** scoped to the fix's blast radius (full only if it touched shared code
 or a targeted run surprised you). A docs-only fix needs no run. Don't commit broken code.
-**Run the resolved formatter/linter on the changed files too** — this path commits directly
-(Step 9) without `/webdev:commit`'s step 3, and unformatted review fixes get re-flagged by
-CI/bots on the next round, burning the recheck budget. **If the formatter modified any file,
+**Run the resolved formatter/linter on the changed files too**, and **if the fixes touch
+user-facing surface** (UI, routes, forms, API responses) also **invoke `/webdev:verify`** on the
+changed behavior — this path commits directly (Step 9) without `/webdev:commit`'s steps 3 and 3½,
+so formatting and verification happen here or not at all. Unformatted review fixes get re-flagged
+by CI/bots on the next round, burning the recheck budget. **If the formatter modified any file,
 re-run the scoped tests** — the formatted diff is what gets committed, and it's no longer the one
-you just tested. If there were frontend changes, note the user may need to run the dev/build
-command to see them.
+you just tested. Reuse an earlier verify row **only where the current fix provably can't affect
+it** — re-drive any row the fix touches — and carry observed results into the Step 10 replies.
 
 ## Step 8: Pre-push self-review
 Read the full diff cold (`git diff`). For small fixes, check: new contradictions introduced by the

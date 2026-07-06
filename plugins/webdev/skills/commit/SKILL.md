@@ -39,6 +39,29 @@ violations now.
 > at scope · formatter). If either fails, stop and fix before step 4. If the formatter changed
 > files, re-run targeted tests on them before the self-review.
 
+## 3½. Verify user-facing behavior (conditional)
+
+If the diff has an observable surface — UI, routes, forms, API responses, rendered emails —
+make sure `/webdev:verify` results exist for **this** diff before the self-review, and carry the
+observed results into the PR's Manual test-plan line (see `/webdev:open-pr`):
+- **Already verified this session** (an orchestrator like `new-feature`, `ship-it`, or `fix-bug`
+  invoked verify just before chaining here, and the diff hasn't changed since) → **reuse those
+  recorded results**; don't re-drive the app for the same diff — a second pass wastes time and
+  re-runs seeding/form submits.
+- **No current results** (direct `/webdev:commit` invocation, or the diff changed after the last
+  verify) → **invoke `/webdev:verify`** now.
+- **If verify's fail-fix loop changed code**, redo steps 2–3 at targeted scope on the changed
+  files before continuing — a fix made during verification must not dodge the gates that already
+  passed on the previous diff.
+
+**Verify must come back clean to proceed.** If its overall result is `failed` — a row still failing
+after the fix-and-recheck cap — **stop here**, exactly as you would on a failing test or lint gate;
+don't carry a change the running app just proved broken into self-review and staging. Only
+`verified`, or `partial` with nothing worse than `needs-human` rows, clears this step.
+
+Skip only for pure refactors, docs, or backend changes fully covered by tests — but then *say*
+it was skipped and why in the Output, don't leave verification silently absent.
+
 ## 4. Pre-push self-review (hostile read with enumeration)
 
 Before staging, read the full diff as a cold reviewer seeing it for the first time. The goal is
@@ -130,7 +153,10 @@ review knowledge on top of the generic set above without forking this skill.
 - **Stale references** — examples, "see step N" pointers, snippets that reference the old structure.
 - **Sweep coverage** — fixed pattern X in one file? Grep for X elsewhere.
 
-If the self-review surfaces something, fix it now — same diff, no extra commit.
+If the self-review surfaces something, fix it now — same diff, no extra commit. **If that fix
+changes an observable surface** (UI, route, form, API response), redo step 3½ for the affected
+rows — the verify evidence recorded before this review is now stale, and `/webdev:open-pr`'s
+Manual line must reflect the diff that actually ships.
 
 ## 5. Stage only the right files
 
@@ -197,4 +223,5 @@ Skip only if the user said "commit but don't PR" or it's a trivial typo/comment 
 When complete, report back:
 - **Branch** · **Commit SHA** (short) · **PR URL** (if created)
 - **Test result**: pass/fail summary and scope
+- **Verify**: run (observed results) / skipped (why — no observable surface)
 - **Self-review**: tier used (`fast-path` or `full`) + confirmation 4a–4d were enumerated when full (note anything found + fixed)

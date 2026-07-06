@@ -120,7 +120,9 @@ the half-done state a reviewer catches.
 
 **Invoke `/webdev:run-tests`**: the new test(s) plus the blast radius of the changed code
 (full suite only if the fix touched foundational code — that skill's canonical list).
-Re-run the original reproduction one last time end to end.
+Then re-run the original reproduction end to end — for a **user-facing** bug, do this via
+**`/webdev:verify`** so the re-drive produces observed evidence (its row/verdict contract),
+not a remembered impression.
 
 ## 8. Commit and PR
 
@@ -139,6 +141,7 @@ doesn't exist — that's what keeps a bug-fix PR reviewable in one honest pass.
   ├── /webdev:new-branch        (project's bug-fix prefix — fix/ default, per branchPrefixes)
   ├── /webdev:plan-inventory    (only if the root cause trips its triggers)
   ├── /webdev:run-tests         (new test red → green, then blast radius)
+  ├── /webdev:verify            (user-facing bugs — re-drive the repro, observed)
   └── /webdev:commit
         └── /webdev:open-pr
 ```
