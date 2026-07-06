@@ -41,18 +41,18 @@ a default-branch run un-findable by branch.
 - **Branch-only (no PR):** first pin down *which* branch is red — the branch the user named, else
   confirm the current branch is the intended one (don't assume you're already on it). Its `<base>`
   for the Step 3 pre-existing check is the default branch it would merge into (resolve as in
-  `/webdev:new-branch`). Query that branch's runs and read the **conclusion** rather than filtering
-  on a single status — a red check can be `failure` **or** `timed_out`, `cancelled`,
-  `startup_failure`, `action_required`, and a bare `--limit 5` can miss it when several workflows
-  share a push:
+  `/webdev:new-branch`). Resolve that branch's **tip SHA** and query the runs *for that commit* —
+  scoping to the SHA sidesteps any `--limit` window when many workflows share a push. Among
+  **completed** runs, the red one is any whose `conclusion` isn't `success`/`skipped` (`failure`,
+  `timed_out`, `cancelled`, `startup_failure`, `action_required`); a still-`queued`/`in_progress`
+  run has a null conclusion — wait for it, don't treat it as the failure:
   ```bash
-  gh run list --branch <red-branch> --limit 20 --json databaseId,workflowName,status,conclusion,headSha
+  gh run list --commit <tip-sha> --json databaseId,workflowName,status,conclusion
   ```
-  Pick the run on the branch tip whose `conclusion` is not `success`/`skipped`. For a branch-only
-  **external/status check** (CircleCI, Buildkite — not an Actions run, so `gh run list` never shows
-  it), read the commit's statuses/check-runs directly:
-  `gh api repos/<owner>/<repo>/commits/<sha>/status` and `.../check-runs`, then follow the provider
-  link — or open a PR so `gh pr checks` surfaces it.
+  For a branch-only **external/status check** (CircleCI, Buildkite — not an Actions run, so
+  `gh run list` never shows it), read the commit's statuses/check-runs directly:
+  `gh api repos/<owner>/<repo>/commits/<tip-sha>/status` and `.../check-runs`, then follow the
+  provider link — or open a PR so `gh pr checks` surfaces it.
 
 Then, **for a GitHub Actions run**, pull only the failure: `gh run view <run-id> --log-failed`
 (`gh run view` reads Actions runs only — an external/status check has no run id, so stay on its
@@ -90,7 +90,10 @@ type; it determines the fix path:
 
 - **Caused by this branch** — the error names files/symbols this branch changed, or the check was
   green before the last push. Default assumption when in doubt. → Fix here (Step 4).
-- **Pre-existing on base** — verify, don't guess:
+- **Pre-existing on base** — verify, don't guess. (Skip this entirely when the red ref *is* the
+  default branch — the post-merge case from Step 1. There `<base>` is the failing branch itself, so
+  "also red on base" is trivially true and meaningless; that regression is yours to fix on the
+  `fix/` branch, not to reclassify as pre-existing.)
   ```bash
   gh run list --branch <base> --workflow "<workflow-name>" --limit 3
   ```
@@ -127,7 +130,9 @@ Run the local equivalent of the failing step (resolved test/lint/typecheck/build
 ## Step 5: Fix and verify locally
 
 Apply the fix at the cause. Then verify with the check that actually failed:
-- **Test failure** → **invoke `/webdev:run-tests`** at the fix's blast radius.
+- **Test failure** → **invoke `/webdev:run-tests`** at the fix's blast radius — but when CI failed
+  on the *full suite* or under CI-specific flags/runner, re-run that exact command/scope too: a
+  green targeted run doesn't clear a suite-wide or flag-specific CI failure.
 - **Lint / typecheck / build failure** → re-run that resolved command.
 - **Install / dependency failure** → re-run the **exact install command with CI's flags**
   (`npm ci`, `pnpm install --frozen-lockfile`, …) — tests passing against an already-populated
