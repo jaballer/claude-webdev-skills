@@ -78,8 +78,10 @@ codebase's conventions** (read `CLAUDE.md` if present). Work through all fixes b
 or a targeted run surprised you). A docs-only fix needs no run. Don't commit broken code.
 **Run the resolved formatter/linter on the changed files too** — this path commits directly
 (Step 9) without `/webdev:commit`'s step 3, and unformatted review fixes get re-flagged by
-CI/bots on the next round, burning the recheck budget. If there
-were frontend changes, note the user may need to run the dev/build command to see them.
+CI/bots on the next round, burning the recheck budget. **If the formatter modified any file,
+re-run the scoped tests** — the formatted diff is what gets committed, and it's no longer the one
+you just tested. If there were frontend changes, note the user may need to run the dev/build
+command to see them.
 
 ## Step 8: Pre-push self-review
 Read the full diff cold (`git diff`). For small fixes, check: new contradictions introduced by the
@@ -100,9 +102,17 @@ fix(pr-<number>): address review comments
 
 - <brief description of each fix>
 ```
-Then plain `git push` — no remote/refspec override, so git uses the pushRemote `gh pr checkout`
-configured (on a fork PR that's the contributor's repo — see Step 2). (Honor `coAuthorTrailer`
-in `.claude/webdev.json` as in `/webdev:commit`.)
+Then push. For a same-repo PR, plain `git push` works — git uses the upstream `gh pr checkout`
+configured. But for a **fork PR whose local branch name differs from the PR's head branch** (a PR
+opened from the fork's `main`/`master`, or a checkout renamed to avoid a local collision), a
+no-argument push fails under Git's default `push.default=simple` — it requires the upstream to
+share the current branch's name. Push an explicit refspec to the PR head instead: get the head
+branch from `gh pr view <number> --json headRefName -q .headRefName`, and the remote that
+`gh pr checkout` configured from `git config branch.<local>.pushRemote` (falling back to `.remote`):
+```bash
+git push <pushRemote> HEAD:<headRefName>
+```
+(Honor `coAuthorTrailer` in `.claude/webdev.json` as in `/webdev:commit`.)
 
 ## Step 10: Reply to each comment
 Inline reply:
@@ -124,15 +134,20 @@ Replying alone doesn't resolve. Fetch thread node IDs (distinct from comment IDs
 comments per thread, since the actionable comment may be a follow-up reply, not the root:
 ```bash
 gh api graphql -f query='
-  query($owner:String!,$repo:String!,$pr:Int!){
+  query($owner:String!,$repo:String!,$pr:Int!,$after:String){
     repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
-      reviewThreads(first:100){ nodes{ id isResolved comments(first:100){ nodes{ databaseId } } } } } } }' \
+      reviewThreads(first:100, after:$after){
+        pageInfo{ hasNextPage endCursor }
+        nodes{ id isResolved comments(first:100){ nodes{ databaseId } } } } } } }' \
   -f owner=<owner> -f repo=<repo> -F pr=<pr_number>
 ```
-`first:100` caps at one page — on big PRs add `pageInfo { hasNextPage endCursor }` and keep
-fetching with `after:` until exhausted; a tracked comment can live on page 2. For each tracked
-comment ID, find the thread whose `comments.nodes[].databaseId` **contains** it (not just `[0]`).
-For each matched thread with `isResolved:false`:
+`reviewThreads` caps at 100 per page (GraphQL connections can't exceed it). Step 3's paginated
+REST fetch can track comment IDs whose thread lives past page 1, and those never resolve if you
+stop here — so **if `pageInfo.hasNextPage` is true, repeat with `-f after=<endCursor>` and
+concatenate the `nodes` before matching.** (`comments(first:100)` per thread is enough — a single
+thread rarely exceeds 100 replies.)
+For each tracked comment ID, find the thread whose `comments.nodes[].databaseId` **contains** it
+(not just `[0]`). For each matched thread with `isResolved:false`:
 ```bash
 gh api graphql -f query='
   mutation($threadId:ID!){ resolveReviewThread(input:{threadId:$threadId}){ thread{ isResolved } } }' \
