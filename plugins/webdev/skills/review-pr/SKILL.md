@@ -195,7 +195,9 @@ themselves introduced. **Default: recheck once before declaring done.**
    (`gh pr checks --json name,state,link` — the `/actions/runs/<id>/` segment) or
    `gh run list --commit $(git rev-parse HEAD)`, then `gh run view <run_id> --log-failed`; for an
    **external/status check** (no Actions run exists), follow the check's `link` to the provider
-   instead — `gh run view` can't read those.
+   instead — `gh run view` can't read those. For anything beyond a quick fix, **invoke
+   `/webdev:fix-ci`** — it owns the full triage loop (first-real-error, local repro, CI-vs-local
+   divergences).
    **Pending checks** → note them; they gate the merge-readiness verdict below.
 5. **New comments or a caused-by-us failing check** → loop back to Step 4 with the same
    verify→sweep→fix→self-review→push→reply discipline. **Zero new and checks green** → done.

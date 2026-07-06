@@ -69,7 +69,7 @@ Claude will also invoke them automatically based on what you ask for.
 | `coAuthorTrailer` | `commit`, `review-pr` | **Default `false`.** Opt in to an AI co-author commit trailer |
 | `prFooter` | `open-pr` | **Default `false`.** Opt in to a "Generated with Claude Code" PR footer |
 
-## Skills (v1.1.0)
+## Skills (v1.2.0)
 
 **Getting started**
 
@@ -98,6 +98,7 @@ Claude will also invoke them automatically based on what you ask for.
 | Skill | What it does |
 |---|---|
 | `/webdev:review-pr` | Addresses PR review comments (any bot or human) end to end: verify → sweep → fix → test → commit → reply → resolve threads → wait-and-recheck. Silence ≠ approval. |
+| `/webdev:fix-ci` | Triage a red check: read the failing run's logs, classify (this branch / pre-existing / flake), reproduce locally, fix the cause, watch it go green. Never fixes the signal. |
 | `/webdev:post-merge-review` | Deep-dive review of a single merged PR — completeness, tests, security, docs, with a verdict. |
 | `/webdev:qa-review` | Broad audit of all recently merged work, with parallel sub-agents and a blocker summary; fixes (if any) land on a `review/` branch. |
 
@@ -115,8 +116,7 @@ Claude will also invoke them automatically based on what you ask for.
 
 ## Roadmap
 
-The core is complete. Planned next skills, roughly in order: `fix-ci` (triage a red PR check
-via `gh run`), `fix-bug` (reproduce → failing test → fix orchestrator), `merge-pr` (verify
+The core is complete. Planned next skills, roughly in order: `fix-bug` (reproduce → failing test → fix orchestrator), `merge-pr` (verify
 approvals + checks, merge, chain to `sync-main`), `verify` (manual in-browser verification for
 UI work), `update-deps`, and a `compare`/changelog skill for release notes.
 
