@@ -113,7 +113,14 @@ type; it determines the fix path:
 
 ## Step 4: Reproduce locally before fixing
 
-Run the local equivalent of the failing step: `bash -c "$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command <test|lint|typecheck|build>)"`.
+Run the local equivalent of the failing step. Capture the resolved command **first** so an
+unresolved key aborts instead of silently running nothing — command substitution inside
+`bash -c "$(…)"` discards `resolve-command`'s non-zero exit, so `bash -c "$(false)"` still exits 0:
+
+```bash
+CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command <test|lint|typecheck|build>)" || exit 1
+bash -c "$CMD"
+```
 
 - **Fails locally too** → good, you have a fast feedback loop. Fix, re-run locally until green.
 - **Green locally, red in CI** → don't guess-push. Read the workflow file (`.github/workflows/…`)

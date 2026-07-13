@@ -82,6 +82,15 @@ def package_manager_and_install(root: Path, overrides: Dict[str, Any]) -> Tuple[
         return "bun", "bun install"
     if root.joinpath("package-lock.json").exists():
         return "npm", "npm install"
+    # Corepack: a JS project may declare its manager via package.json's
+    # "packageManager" field (e.g. "pnpm@8.6.0") without committing a lockfile.
+    pkg = package_json(root)
+    if pkg:
+        declared = pkg.get("packageManager")
+        if isinstance(declared, str) and declared:
+            name = declared.split("@", 1)[0].strip()
+            if name in ("pnpm", "yarn", "bun", "npm"):
+                return name, install_for_pm(name)
     return "unknown", ""
 
 
@@ -92,7 +101,9 @@ def package_manager_exec(package_manager: str, command: str) -> str:
     if package_manager == "npm":
         return f"npx {command}"
     if package_manager == "yarn":
-        return f"yarn exec {command}"
+        # A bare yarn.lock is usually Yarn Classic (v1), which has no `yarn exec`.
+        # `yarn run <bin>` runs a node_modules/.bin binary in both Classic and Berry.
+        return f"yarn run {command}"
     if package_manager == "bun":
         return f"bunx {command}"
     if package_manager == "composer":
@@ -504,7 +515,20 @@ def main() -> None:
     root = Path(args.root).resolve() if args.root else Path.cwd()
 
     webdev_path = root / ".claude" / "webdev.json"
-    overrides: Dict[str, Any] = load_json(webdev_path) or {}
+    overrides: Dict[str, Any] = {}
+    if webdev_path.exists():
+        # A present-but-unparseable override file must fail loudly: silently
+        # falling back to {} would discard the user's pinned commands and
+        # commandPrefix, running auto-detected host commands instead.
+        loaded = load_json(webdev_path)
+        if loaded is None:
+            print(
+                f"detect-stack: {webdev_path} exists but is not valid JSON — "
+                "fix the file or remove it.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        overrides = loaded
 
     profile = detect(root, overrides)
 
