@@ -11,7 +11,7 @@ description: >
 # QA Review
 
 Comprehensive audit of recently merged functionality to catch bugs, gaps, inconsistencies, and
-improvement opportunities. Resolve project commands via `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command <test|lint|typecheck|build|migration>`.
+improvement opportunities. Resolve project commands via `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command <test|lint|typecheck|build|migrationStatus>`.
 
 ## Step 1: Get onto the up-to-date base (no branch yet)
 The audit itself (Steps 2–8) is **read-only** — don't create a branch for it. But it must read
@@ -41,15 +41,15 @@ failures as findings — don't fix yet (Step 9).
 
 ## Step 5: Smoke test with static analysis
 Run the resolved checks that apply to the stack:
-- **Build / type-check** — `bash -c "$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command build)"` and `bash -c "$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command typecheck)"` (if non-empty); confirm it compiles.
-- **Lint / format check** — `bash -c "$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command lint)"` (the script returns check-mode commands such as `eslint`, `biome check`, `pint --test`, `ruff check`).
+- **Build / type-check** — resolve each command, run it only if one resolved (the script exits non-zero when a stack has no such command, so `&&` skips it cleanly): `CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command build)" && bash -c "$CMD"`, likewise for `typecheck`; confirm it compiles.
+- **Lint / format check** — `CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command lint)" && bash -c "$CMD"` (the script returns check-mode commands such as `eslint`, `biome check`, `pint --test`, `ruff check`).
 - **Framework integrity** — route/view/config compile check if the framework offers one.
 
 **Comment-quality check**: flag added comments that narrate the next line rather than explain a
 non-obvious *why*, and empty/redundant docblocks. Surface in Style / Consistency Issues if present.
 
 ## Step 6: Database concerns
-Run the resolved migration-status command from `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command migration` (skip if N/A for the stack). Are new migrations
+Run the resolved migration-status command: `CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command migrationStatus)" && bash -c "$CMD"` (the `&&` skips it when the stack has no migration tooling). Are new migrations
 reversible? Proper indexes on frequently-queried columns? Correct foreign-key constraints?
 
 ## Step 7: Documentation alignment

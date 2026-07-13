@@ -10,7 +10,15 @@ description: >
 
 # Run Tests
 
-Stack-agnostic. **Resolve the test command through `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command test`**, which honors `.claude/webdev.json` first, then detection — never assume `npm test` or `phpunit`. The script applies `commandPrefix` to detected commands; a command pinned in `webdev.json` is already complete. Execute the resolved command with `bash -c "$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command test)"` and append the runner-specific filter for targeted runs.
+Stack-agnostic. **Resolve the test command through `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command test`**, which honors `.claude/webdev.json` first, then detection — never assume `npm test` or `phpunit`. The script applies `commandPrefix` to detected commands; a command pinned in `webdev.json` is already complete. Capture it first and bail if nothing resolved — the script exits non-zero and prints why (rather than returning an empty string that would run as `bash -c ""`, a silent no-op):
+
+```bash
+TEST_CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command test)" || exit 1   # message already on stderr
+bash -c "$TEST_CMD"                                # full run
+bash -c "$TEST_CMD tests/Feature/FooTest.php"      # targeted — filter goes INSIDE the command string
+```
+
+**Append the runner filter (file path or `-t`/`--filter "name"`) inside the same quoted command string, not after `bash -c "$TEST_CMD"`.** With `bash -c`, words after the command string become positional parameters to `bash` (`$0`, `$1`, …), not arguments to the test runner — so `bash -c "$TEST_CMD" path/to/file` runs the full suite and silently ignores the filter.
 
 ## Decision Logic — default to the smallest run that proves the change
 

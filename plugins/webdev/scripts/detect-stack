@@ -109,8 +109,33 @@ def package_json(root: Path) -> Optional[Dict[str, Any]]:
     return load_json(root / "package.json")
 
 
+PM_INSTALL = {
+    "pnpm": "pnpm install",
+    "yarn": "yarn install",
+    "bun": "bun install",
+    "npm": "npm install",
+    "composer": "composer install",
+    "poetry": "poetry install",
+    "uv": "uv sync",
+    "pip": "pip install -r requirements.txt",
+}
+
+
+def install_for_pm(package_manager: str) -> str:
+    """Return the standard install command for a package manager, or ''."""
+    return PM_INSTALL.get(package_manager, "")
+
+
 def package_manager_and_install(root: Path, overrides: Dict[str, Any]) -> Tuple[str, str]:
-    """Return (package_manager, install_command) detected from lockfiles."""
+    """Return (package_manager, install_command) detected from lockfiles.
+
+    Composer (PHP) is checked before the JS managers: a Laravel/Symfony app
+    commonly ships a frontend lockfile (package-lock.json, etc.) too, and its
+    backend test/format tooling is the primary stack we want to resolve. A
+    frontend-only build command is expected to be pinned in webdev.json.
+    """
+    if root.joinpath("composer.lock").exists() or root.joinpath("composer.json").exists():
+        return "composer", "composer install"
     if root.joinpath("pnpm-lock.yaml").exists():
         return "pnpm", "pnpm install"
     if root.joinpath("yarn.lock").exists():
@@ -119,8 +144,6 @@ def package_manager_and_install(root: Path, overrides: Dict[str, Any]) -> Tuple[
         return "bun", "bun install"
     if root.joinpath("package-lock.json").exists():
         return "npm", "npm install"
-    if root.joinpath("composer.lock").exists() or root.joinpath("composer.json").exists():
-        return "composer", "composer install"
     if root.joinpath("poetry.lock").exists():
         return "poetry", "poetry install"
     if root.joinpath("uv.lock").exists():
@@ -163,31 +186,45 @@ def package_manager_run(package_manager: str, script: str) -> str:
 
 
 def detect_framework(root: Path, pkg: Optional[Dict[str, Any]]) -> str:
-    if pkg is not None:
-        deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
-        for fw in [
-            "next", "nuxt", "@remix-run/react", "astro", "@sveltejs/kit",
-            "svelte", "vite", "react", "vue", "@nestjs/core", "express",
-        ]:
-            if fw in deps:
-                return fw.replace("@remix-run/react", "remix").replace("@nestjs/core", "nestjs")
+    # PHP (Composer) is checked before the JS package.json: a Laravel/Symfony app
+    # commonly carries a frontend package.json too, and its backend framework is the
+    # one that drives test/dev/migration commands. composer.json is PHP-exclusive,
+    # so this never steals a match from a pure JS project.
     if root.joinpath("composer.json").exists():
         composer = load_json(root / "composer.json") or {}
         if "laravel/framework" in composer.get("require", {}):
             return "laravel"
         if any(k.startswith("symfony/") for k in composer.get("require", {})):
             return "symfony"
+    if pkg is not None:
+        deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
+        # Framework-specific entries come before the generic bundler ("vite") so
+        # that e.g. a Vite + Vue app resolves to "vue" (→ vue-tsc), not "vite".
+        for fw in [
+            "next", "nuxt", "@remix-run/react", "astro", "@sveltejs/kit",
+            "svelte", "vue", "vite", "react", "@nestjs/core", "express",
+        ]:
+            if fw in deps:
+                return fw.replace("@remix-run/react", "remix").replace("@nestjs/core", "nestjs")
     if root.joinpath("pyproject.toml").exists():
         pyproject = load_toml(root / "pyproject.toml") or {}
-        deps = pyproject.get("project", {}).get("dependencies", [])
-        if isinstance(deps, list):
-            for d in deps:
-                if d.startswith("django"):
-                    return "django"
-                if d.startswith("flask"):
-                    return "flask"
-                if d.startswith("fastapi"):
-                    return "fastapi"
+        # PEP 621 declares deps as a list of requirement strings; Poetry declares
+        # them as a table (dict) under [tool.poetry.dependencies]. Read both.
+        dep_names: List[str] = []
+        project_deps = pyproject.get("project", {}).get("dependencies", [])
+        if isinstance(project_deps, list):
+            dep_names.extend(str(d) for d in project_deps)
+        poetry_deps = pyproject.get("tool", {}).get("poetry", {}).get("dependencies", {})
+        if isinstance(poetry_deps, dict):
+            dep_names.extend(poetry_deps.keys())
+        for d in dep_names:
+            dl = d.lower()
+            if dl.startswith("django"):
+                return "django"
+            if dl.startswith("flask"):
+                return "flask"
+            if dl.startswith("fastapi"):
+                return "fastapi"
     if find(root, "requirements.txt"):
         req = (root / "requirements.txt").read_text(encoding="utf-8", errors="ignore")
         for name in ["django", "flask", "fastapi"]:
@@ -307,29 +344,48 @@ def js_build(pkg: Optional[Dict[str, Any]], package_manager: str, root: Path, fr
     return "", ""
 
 
+def _composer_requires(root: Path) -> Dict[str, Any]:
+    composer = load_json(root / "composer.json") or {}
+    return {**composer.get("require", {}), **composer.get("require-dev", {})}
+
+
+def _has_pest(root: Path) -> bool:
+    # Pest's config lives at tests/Pest.php in a standard install, and phpunit.xml
+    # is present alongside it — so check for Pest explicitly rather than letting the
+    # PHPUnit branch win.
+    if find(root, "tests/Pest.php") or find(root, "Pest.php"):
+        return True
+    return "pestphp/pest" in _composer_requires(root)
+
+
+def _has_pint(root: Path) -> bool:
+    # A pint.json is explicit formatter config on its own; laravel/pint may also be
+    # used outside a Laravel app, and Laravel apps ship Pint by default.
+    if find(root, "pint.json"):
+        return True
+    reqs = _composer_requires(root)
+    return "laravel/pint" in reqs or "laravel/framework" in reqs
+
+
 def php_test(root: Path, package_manager: str) -> Tuple[str, str]:
+    if _has_pest(root):
+        return "./vendor/bin/pest", "pest"
     if find(root, "phpunit.xml") or find(root, "phpunit.xml.dist"):
         return "./vendor/bin/phpunit", "phpunit.xml"
-    if find(root, "pest.php"):
-        return "./vendor/bin/pest", "pest.php"
     return "", ""
 
 
 def php_format(root: Path, package_manager: str) -> Tuple[str, str]:
-    if find(root, "pint.json") or find(root, "pint.json") or root.joinpath("composer.json").exists():
-        composer = load_json(root / "composer.json") or {}
-        if "laravel/framework" in composer.get("require", {}):
-            return "./vendor/bin/pint", "laravel"
+    if _has_pint(root):
+        return "./vendor/bin/pint", "pint"
     if find_any(root, [".php-cs-fixer*", ".php-cs-fixer.dist.*"]):
         return "./vendor/bin/php-cs-fixer fix", ".php-cs-fixer"
     return "", ""
 
 
 def php_lint(root: Path, package_manager: str, format_cmd: str) -> Tuple[str, str]:
-    if find(root, "pint.json") or root.joinpath("composer.json").exists():
-        composer = load_json(root / "composer.json") or {}
-        if "laravel/framework" in composer.get("require", {}):
-            return "./vendor/bin/pint --test", "laravel"
+    if _has_pint(root):
+        return "./vendor/bin/pint --test", "pint"
     if find_any(root, [".php-cs-fixer*", ".php-cs-fixer.dist.*"]):
         return "./vendor/bin/php-cs-fixer fix --dry-run", ".php-cs-fixer"
     if find(root, "phpstan.neon") or find(root, "phpstan.neon.dist"):
@@ -367,47 +423,60 @@ def python_test(root: Path, package_manager: str) -> Tuple[str, str]:
     return "", ""
 
 
+def _pyproject_tool(root: Path, tool: str) -> bool:
+    if not root.joinpath("pyproject.toml").exists():
+        return False
+    pyproject = load_toml(root / "pyproject.toml") or {}
+    return bool(pyproject.get("tool", {}).get(tool))
+
+
+def _has_ruff(root: Path) -> bool:
+    # A standalone ruff.toml / .ruff.toml is sufficient evidence on its own; don't
+    # require a [tool.ruff] section in pyproject.toml.
+    if find(root, "ruff.toml") or find(root, ".ruff.toml"):
+        return True
+    return _pyproject_tool(root, "ruff")
+
+
+def _has_mypy(root: Path) -> bool:
+    if find(root, "mypy.ini"):
+        return True
+    return _pyproject_tool(root, "mypy")
+
+
 def python_format(root: Path, package_manager: str) -> Tuple[str, str]:
-    if find(root, "ruff.toml") or root.joinpath("pyproject.toml").exists():
-        pyproject = load_toml(root / "pyproject.toml") or {}
-        if pyproject.get("tool", {}).get("ruff"):
-            return f"{package_manager_exec(package_manager, 'ruff')} format .", "ruff.toml"
-    if root.joinpath("pyproject.toml").exists():
-        pyproject = load_toml(root / "pyproject.toml") or {}
-        if pyproject.get("tool", {}).get("black"):
-            return f"{package_manager_exec(package_manager, 'black')} .", "black"
+    if _has_ruff(root):
+        return f"{package_manager_exec(package_manager, 'ruff')} format .", "ruff"
+    if _pyproject_tool(root, "black"):
+        return f"{package_manager_exec(package_manager, 'black')} .", "black"
     return "", ""
 
 
 def python_lint(root: Path, package_manager: str) -> Tuple[str, str]:
-    if find(root, "ruff.toml") or root.joinpath("pyproject.toml").exists():
-        pyproject = load_toml(root / "pyproject.toml") or {}
-        if pyproject.get("tool", {}).get("ruff"):
-            return f"{package_manager_exec(package_manager, 'ruff')} check .", "ruff.toml"
-    if find(root, "mypy.ini") or root.joinpath("pyproject.toml").exists():
-        pyproject = load_toml(root / "pyproject.toml") or {}
-        if pyproject.get("tool", {}).get("mypy"):
-            return package_manager_exec(package_manager, "mypy"), "mypy.ini"
+    if _has_ruff(root):
+        return f"{package_manager_exec(package_manager, 'ruff')} check .", "ruff"
+    if _has_mypy(root):
+        return package_manager_exec(package_manager, "mypy"), "mypy"
     if find(root, "pyrightconfig.json"):
         return package_manager_exec(package_manager, "pyright"), "pyrightconfig.json"
     return "", ""
 
 
 def python_typecheck(root: Path, package_manager: str) -> Tuple[str, str]:
-    if find(root, "mypy.ini") or root.joinpath("pyproject.toml").exists():
-        pyproject = load_toml(root / "pyproject.toml") or {}
-        if pyproject.get("tool", {}).get("mypy"):
-            return package_manager_exec(package_manager, "mypy"), "mypy.ini"
+    if _has_mypy(root):
+        return package_manager_exec(package_manager, "mypy"), "mypy"
     if find(root, "pyrightconfig.json"):
         return package_manager_exec(package_manager, "pyright"), "pyrightconfig.json"
     return "", ""
 
 
-def python_dev(root: Path, framework: str) -> Tuple[str, str]:
+def python_dev(root: Path, package_manager: str, framework: str) -> Tuple[str, str]:
+    # Run through the detected manager (poetry/uv) so the server starts inside the
+    # project environment, matching how test/migration commands are wrapped.
     if framework == "django":
-        return "python manage.py runserver", "framework"
+        return f"{package_manager_exec(package_manager, 'python')} manage.py runserver", "framework"
     if framework == "flask":
-        return "flask run", "framework"
+        return f"{package_manager_exec(package_manager, 'flask')} run", "framework"
     return "", ""
 
 
@@ -420,7 +489,9 @@ def migration_command(root: Path, package_manager: str, framework: str) -> Tuple
         return "php artisan migrate:status", "framework"
     if framework == "django":
         return f"{package_manager_exec(package_manager, 'python')} manage.py showmigrations", "framework"
-    if framework == "next" and find(root, "prisma"):
+    # Prisma is used from many Node stacks (Express, Nest, Vite, plain Node), not
+    # just Next.js — key off the prisma/ directory and a JS manager, not framework.
+    if find(root, "prisma") and package_manager in ("pnpm", "npm", "yarn", "bun"):
         return f"{package_manager_exec(package_manager, 'prisma')} migrate status", "prisma"
     return "", ""
 
@@ -447,7 +518,11 @@ def default_branch(root: Path) -> str:
             capture_output=True, text=True, cwd=str(root)
         )
         if result.returncode == 0 and result.stdout:
-            return result.stdout.strip().split("/")[-1]
+            ref = result.stdout.strip()
+            # Strip the fixed refs/remotes/origin/ prefix rather than splitting on
+            # every slash, so a slashed default branch (release/1.x) survives.
+            prefix = "refs/remotes/origin/"
+            return ref[len(prefix):] if ref.startswith(prefix) else ref.split("/")[-1]
         for branch in ["main", "master"]:
             result = subprocess.run(
                 ["git", "rev-parse", "--verify", branch],
@@ -485,15 +560,15 @@ def detect(root: Path, overrides: Dict[str, Any]) -> Dict[str, Any]:
     pm, install = package_manager_and_install(root, overrides)
     framework = detect_framework(root, pkg)
 
-    gaps: List[str] = []
-
     if "packageManager" in overrides:
         pm = overrides["packageManager"]
+        # A pinned package manager implies its standard install command unless the
+        # user pinned install explicitly (handled below). Otherwise a project that
+        # pinned only packageManager gets a stale/empty install command.
+        if "install" not in overrides:
+            install = install_for_pm(pm) or install
     if "install" in overrides:
         install = overrides["install"]
-
-    if pm in ("unknown", ""):
-        gaps.append("No supported lockfile or package manager found.")
 
     if pm in ("pnpm", "npm", "yarn", "bun"):
         test, test_src = js_test(pkg, pm, root)
@@ -514,7 +589,7 @@ def detect(root: Path, overrides: Dict[str, Any]) -> Dict[str, Any]:
         fmt, fmt_src = python_format(root, pm)
         lint, lint_src = python_lint(root, pm)
         typecheck, typecheck_src = python_typecheck(root, pm)
-        dev, dev_src = python_dev(root, framework)
+        dev, dev_src = python_dev(root, pm, framework)
         build, build_src = python_build(root, framework)
     else:
         test = fmt = lint = typecheck = dev = build = ""
@@ -522,9 +597,6 @@ def detect(root: Path, overrides: Dict[str, Any]) -> Dict[str, Any]:
 
     migration, migration_src = migration_command(root, pm, framework)
     workspace = detect_workspace(root, pkg)
-
-    if not test:
-        gaps.append("Could not determine a test runner.")
 
     defaults: Dict[str, Any] = {
         "packageManager": pm,
@@ -536,7 +608,7 @@ def detect(root: Path, overrides: Dict[str, Any]) -> Dict[str, Any]:
         "dev": dev,
         "build": build,
         "framework": framework,
-        "migration": migration,
+        "migrationStatus": migration,
         "workspace": workspace,
         "defaultBranch": default_branch(root),
         "mergeMethod": merge_method(root),
@@ -554,7 +626,7 @@ def detect(root: Path, overrides: Dict[str, Any]) -> Dict[str, Any]:
         "dev": dev_src,
         "build": build_src,
         "framework": "detected" if framework else "",
-        "migration": migration_src,
+        "migrationStatus": migration_src,
         "workspace": "detected" if workspace else "",
         "defaultBranch": "detected",
         "mergeMethod": "detected",
@@ -572,10 +644,26 @@ def detect(root: Path, overrides: Dict[str, Any]) -> Dict[str, Any]:
 
     command_prefix = resolved.get("commandPrefix", "")
     # Prefix applies to detected commands, not to pinned ones.
-    command_keys = ["install", "test", "format", "lint", "typecheck", "dev", "build", "migration"]
+    command_keys = ["install", "test", "format", "lint", "typecheck", "dev", "build", "migrationStatus"]
     for key in command_keys:
         if sources[key] != "webdev.json" and resolved.get(key):
             resolved[key] = apply_prefix(resolved[key], command_prefix)
+
+    # Compute gaps from the RESOLVED profile, after overrides are applied, so a
+    # pinned command (test, packageManager, …) clears a gap that filesystem
+    # detection alone could not.
+    gaps: List[str] = []
+    if resolved.get("packageManager") in ("unknown", "", None):
+        gaps.append("No supported lockfile or package manager found.")
+    if not resolved.get("test"):
+        if resolved.get("workspace"):
+            gaps.append(
+                f"Monorepo detected ({resolved['workspace']}) but no test command "
+                "resolved at the repo root — pin commands in .claude/webdev.json or "
+                "run from the target workspace package."
+            )
+        else:
+            gaps.append("Could not determine a test runner.")
 
     resolved["gaps"] = gaps
     resolved["sources"] = sources
@@ -597,10 +685,25 @@ def main() -> None:
     profile = detect(root, overrides)
 
     if args.key:
-        value = profile.get(args.key)
-        if value is None:
+        # Accept the legacy "migration" alias for the documented "migrationStatus".
+        key = {"migration": "migrationStatus"}.get(args.key, args.key)
+        if key not in profile:
             print(f"detect-stack: unknown key {args.key!r}", file=sys.stderr)
             sys.exit(1)
+        value = profile.get(key)
+        # A command key that resolves to nothing must fail loudly instead of
+        # printing an empty string that callers would run as `bash -c ""` (a
+        # silent success that runs nothing). Non-command keys may be empty.
+        command_keys = {
+            "install", "test", "format", "lint", "typecheck", "dev", "build", "migrationStatus",
+        }
+        if key in command_keys and (value is None or value == ""):
+            print(
+                f"detect-stack: no {key!r} command resolved for this stack — "
+                "pin it in .claude/webdev.json or install a supported tool.",
+                file=sys.stderr,
+            )
+            sys.exit(3)
         if isinstance(value, (list, dict, bool, type(None))):
             print(json.dumps(value), flush=True)
         else:
