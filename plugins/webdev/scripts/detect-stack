@@ -15,20 +15,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
-# Prefer the stdlib tomllib (Python 3.11+). Fall back to a tiny subset parser for
-# older versions — we only need simple key/value and [section] detection.
-try:
-    import tomllib
-    HAS_TOMLLIB = True
-except Exception:  # pragma: no cover
-    tomllib = None  # type: ignore
-    HAS_TOMLLIB = False
 
 DEFAULT_BRANCH_PREFIXES = ["feature", "fix", "refactor", "docs", "chore", "review"]
 
@@ -39,54 +28,6 @@ def load_json(path: Path) -> Optional[Any]:
             return json.load(f)
     except Exception:
         return None
-
-
-def load_toml(path: Path) -> Optional[Dict[str, Any]]:
-    if HAS_TOMLLIB:
-        try:
-            with open(path, "rb") as f:
-                return tomllib.load(f)
-        except Exception:
-            return None
-    return parse_basic_toml(path)
-
-
-def parse_basic_toml(path: Path) -> Optional[Dict[str, Any]]:
-    """Tiny TOML parser sufficient for pyproject.toml header checks."""
-    data: Dict[str, Any] = {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            text = f.read()
-    except Exception:
-        return None
-    section: Any = data
-    for raw in text.splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if not line:
-            continue
-        m = re.match(r"^\[(.+)\]$", line)
-        if m:
-            keys = [k.strip().strip('"') for k in m.group(1).split(".")]
-            section = data
-            for k in keys:
-                section.setdefault(k, {})
-                section = section[k]
-            continue
-        if re.match(r"^\[\[.\]\]$", line):
-            section = data
-            continue
-        if "=" in line:
-            key, value = line.split("=", 1)
-            key = key.strip().strip('"')
-            value = value.strip().strip('"').strip("'")
-            if re.fullmatch(r"true|yes|on", value, re.I):
-                value = True
-            elif re.fullmatch(r"false|no|off", value, re.I):
-                value = False
-            elif re.fullmatch(r"\d+", value):
-                value = int(value)
-            section[key] = value
-    return data
 
 
 def find(root: Path, *names: str) -> Optional[Path]:
@@ -115,9 +56,6 @@ PM_INSTALL = {
     "bun": "bun install",
     "npm": "npm install",
     "composer": "composer install",
-    "poetry": "poetry install",
-    "uv": "uv sync",
-    "pip": "pip install -r requirements.txt",
 }
 
 
@@ -144,12 +82,6 @@ def package_manager_and_install(root: Path, overrides: Dict[str, Any]) -> Tuple[
         return "bun", "bun install"
     if root.joinpath("package-lock.json").exists():
         return "npm", "npm install"
-    if root.joinpath("poetry.lock").exists():
-        return "poetry", "poetry install"
-    if root.joinpath("uv.lock").exists():
-        return "uv", "uv sync"
-    if root.joinpath("requirements.txt").exists():
-        return "pip", "pip install -r requirements.txt"
     return "unknown", ""
 
 
@@ -165,10 +97,6 @@ def package_manager_exec(package_manager: str, command: str) -> str:
         return f"bunx {command}"
     if package_manager == "composer":
         return f"./vendor/bin/{command}"
-    if package_manager == "poetry":
-        return f"poetry run {command}"
-    if package_manager == "uv":
-        return f"uv run {command}"
     return command
 
 
@@ -206,30 +134,6 @@ def detect_framework(root: Path, pkg: Optional[Dict[str, Any]]) -> str:
         ]:
             if fw in deps:
                 return fw.replace("@remix-run/react", "remix").replace("@nestjs/core", "nestjs")
-    if root.joinpath("pyproject.toml").exists():
-        pyproject = load_toml(root / "pyproject.toml") or {}
-        # PEP 621 declares deps as a list of requirement strings; Poetry declares
-        # them as a table (dict) under [tool.poetry.dependencies]. Read both.
-        dep_names: List[str] = []
-        project_deps = pyproject.get("project", {}).get("dependencies", [])
-        if isinstance(project_deps, list):
-            dep_names.extend(str(d) for d in project_deps)
-        poetry_deps = pyproject.get("tool", {}).get("poetry", {}).get("dependencies", {})
-        if isinstance(poetry_deps, dict):
-            dep_names.extend(poetry_deps.keys())
-        for d in dep_names:
-            dl = d.lower()
-            if dl.startswith("django"):
-                return "django"
-            if dl.startswith("flask"):
-                return "flask"
-            if dl.startswith("fastapi"):
-                return "fastapi"
-    if find(root, "requirements.txt"):
-        req = (root / "requirements.txt").read_text(encoding="utf-8", errors="ignore")
-        for name in ["django", "flask", "fastapi"]:
-            if re.search(rf"^{name}\b", req, re.M | re.I):
-                return name
     return ""
 
 
@@ -413,82 +317,9 @@ def php_build(root: Path, framework: str) -> Tuple[str, str]:
     return "", ""
 
 
-def python_test(root: Path, package_manager: str) -> Tuple[str, str]:
-    if find(root, "pytest.ini") or find(root, "setup.cfg") or root.joinpath("pyproject.toml").exists():
-        pyproject = load_toml(root / "pyproject.toml") or {}
-        if "pytest" in pyproject.get("project", {}).get("dependencies", []) or pyproject.get("tool", {}).get("pytest"):
-            return package_manager_exec(package_manager, "pytest"), "pytest.ini"
-    if find(root, "tests"):
-        return package_manager_exec(package_manager, "pytest"), "tests/"
-    return "", ""
-
-
-def _pyproject_tool(root: Path, tool: str) -> bool:
-    if not root.joinpath("pyproject.toml").exists():
-        return False
-    pyproject = load_toml(root / "pyproject.toml") or {}
-    return bool(pyproject.get("tool", {}).get(tool))
-
-
-def _has_ruff(root: Path) -> bool:
-    # A standalone ruff.toml / .ruff.toml is sufficient evidence on its own; don't
-    # require a [tool.ruff] section in pyproject.toml.
-    if find(root, "ruff.toml") or find(root, ".ruff.toml"):
-        return True
-    return _pyproject_tool(root, "ruff")
-
-
-def _has_mypy(root: Path) -> bool:
-    if find(root, "mypy.ini"):
-        return True
-    return _pyproject_tool(root, "mypy")
-
-
-def python_format(root: Path, package_manager: str) -> Tuple[str, str]:
-    if _has_ruff(root):
-        return f"{package_manager_exec(package_manager, 'ruff')} format .", "ruff"
-    if _pyproject_tool(root, "black"):
-        return f"{package_manager_exec(package_manager, 'black')} .", "black"
-    return "", ""
-
-
-def python_lint(root: Path, package_manager: str) -> Tuple[str, str]:
-    if _has_ruff(root):
-        return f"{package_manager_exec(package_manager, 'ruff')} check .", "ruff"
-    if _has_mypy(root):
-        return package_manager_exec(package_manager, "mypy"), "mypy"
-    if find(root, "pyrightconfig.json"):
-        return package_manager_exec(package_manager, "pyright"), "pyrightconfig.json"
-    return "", ""
-
-
-def python_typecheck(root: Path, package_manager: str) -> Tuple[str, str]:
-    if _has_mypy(root):
-        return package_manager_exec(package_manager, "mypy"), "mypy"
-    if find(root, "pyrightconfig.json"):
-        return package_manager_exec(package_manager, "pyright"), "pyrightconfig.json"
-    return "", ""
-
-
-def python_dev(root: Path, package_manager: str, framework: str) -> Tuple[str, str]:
-    # Run through the detected manager (poetry/uv) so the server starts inside the
-    # project environment, matching how test/migration commands are wrapped.
-    if framework == "django":
-        return f"{package_manager_exec(package_manager, 'python')} manage.py runserver", "framework"
-    if framework == "flask":
-        return f"{package_manager_exec(package_manager, 'flask')} run", "framework"
-    return "", ""
-
-
-def python_build(root: Path, framework: str) -> Tuple[str, str]:
-    return "", ""
-
-
 def migration_command(root: Path, package_manager: str, framework: str) -> Tuple[str, str]:
     if framework == "laravel":
         return "php artisan migrate:status", "framework"
-    if framework == "django":
-        return f"{package_manager_exec(package_manager, 'python')} manage.py showmigrations", "framework"
     # Prisma is used from many Node stacks (Express, Nest, Vite, plain Node), not
     # just Next.js — key off the prisma/ directory and a JS manager, not framework.
     if find(root, "prisma") and package_manager in ("pnpm", "npm", "yarn", "bun"):
@@ -584,13 +415,6 @@ def detect(root: Path, overrides: Dict[str, Any]) -> Dict[str, Any]:
         typecheck, typecheck_src = php_typecheck(root, pm)
         dev, dev_src = php_dev(root, framework)
         build, build_src = php_build(root, framework)
-    elif pm in ("poetry", "uv", "pip"):
-        test, test_src = python_test(root, pm)
-        fmt, fmt_src = python_format(root, pm)
-        lint, lint_src = python_lint(root, pm)
-        typecheck, typecheck_src = python_typecheck(root, pm)
-        dev, dev_src = python_dev(root, pm, framework)
-        build, build_src = python_build(root, framework)
     else:
         test = fmt = lint = typecheck = dev = build = ""
         test_src = fmt_src = lint_src = typecheck_src = dev_src = build_src = ""

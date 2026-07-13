@@ -42,7 +42,7 @@ failures as findings — don't fix yet (Step 9).
 ## Step 5: Smoke test with static analysis
 Run the resolved checks that apply to the stack:
 - **Build / type-check** — resolve each command, run it only if one resolved (the script exits non-zero when a stack has no such command, so `&&` skips it cleanly): `CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command build)" && bash -c "$CMD"`, likewise for `typecheck`; confirm it compiles.
-- **Lint / format check** — `CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command lint)" && bash -c "$CMD"` (the script returns check-mode commands such as `eslint`, `biome check`, `pint --test`, `ruff check`).
+- **Lint / format check** — `CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command lint)" && bash -c "$CMD"` (the script returns check-mode commands such as `eslint`, `biome check`, `pint --test`, `phpstan analyse`).
 - **Framework integrity** — route/view/config compile check if the framework offers one.
 
 **Comment-quality check**: flag added comments that narrate the next line rather than explain a

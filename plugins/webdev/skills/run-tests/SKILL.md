@@ -5,7 +5,7 @@ description: >
   the user asks to "run tests", "check tests", "make sure tests pass", or before
   committing or opening a PR. Also trigger automatically after code changes that could
   affect existing functionality. Resolves the test command via /webdev:detect-stack, so
-  it works on any stack (vitest, jest, phpunit, pest, pytest, …).
+  it works on any stack (vitest, jest, phpunit, pest, …).
 ---
 
 # Run Tests
@@ -66,7 +66,6 @@ Use the resolved test command, then narrow it with the runner's native filter:
 | vitest / jest | `<test>` | `<test> path/to/file.test.ts` | `<test> -t "name"` |
 | phpunit | `<test>` | `<test> tests/Feature/FooTest.php` | `<test> --filter test_name` |
 | pest | `<test>` | `<test> tests/Feature/FooTest.php` | `<test> --filter "name"` |
-| pytest | `<test>` | `<test> tests/test_foo.py` | `<test> -k "name"` |
 
 `<test>` is the resolved command (incl. `commandPrefix`). If tests behave unexpectedly,
 clear caches/build artifacts first (framework-appropriate: `config:clear`, deleting

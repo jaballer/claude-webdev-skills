@@ -3,7 +3,8 @@ name: detect-stack
 description: >
   Resolves the project's toolchain — package manager, test runner, formatter/linter,
   framework, and dev/run command — so other webdev skills issue the right commands on
-  any stack (JS/TS, PHP, Python, etc.). Use at the start of any workflow that needs to
+  any stack. Auto-detects JS/TS and PHP; every other stack is supported through an
+  explicit .claude/webdev.json override. Use at the start of any workflow that needs to
   run tests, format code, install dependencies, or start the dev server. Other webdev
   skills invoke this first. Honors an explicit .claude/webdev.json override before
   falling back to filesystem detection.
@@ -14,6 +15,12 @@ description: >
 This is the **foundation** skill. Every other `webdev` skill that runs a project command
 (`run-tests`, `commit`, `new-feature`, …) resolves the command through this plugin's
 scripts rather than hardcoding `npm test` or `phpunit`.
+
+**Supported stacks.** Auto-detection covers **JS/TS** (npm/pnpm/yarn/bun) and **PHP**
+(Composer). Any other stack works too — pin its commands in `.claude/webdev.json` and
+they're used verbatim. The detector intentionally stays narrow: an undetected stack
+falls through to the `gaps` path and asks, rather than guessing a command it can't
+stand behind.
 
 ## Resolve the stack profile
 

@@ -42,7 +42,7 @@ graders:
   - type: regex
     name: format-command
     target: last_message
-    pattern: "prettier|biome|ruff|pint|black|php-cs-fixer"
+    pattern: "prettier|biome|pint|php-cs-fixer"
     match: contains
     weight: 1
   - type: tool_used

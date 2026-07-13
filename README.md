@@ -3,8 +3,8 @@
 A **stack-agnostic** set of [Claude Code](https://claude.com/claude-code) skills that give
 any web project a consistent, well-reasoned workflow: **branch → plan → test → commit → PR
 → review**. The skills auto-detect your toolchain (package manager, test runner, formatter,
-framework) so they work zero-config on a fresh Vite/Next/Laravel/Django project — and let
-power users pin exact commands via a small override file.
+framework) so they work zero-config on a fresh Vite/Next/Laravel project — and let
+power users pin exact commands for any other stack via a small override file.
 
 Built by [Jabal Torres](https://jabaltorres.com). Distributed as a Claude Code plugin.
 
