@@ -92,7 +92,7 @@ The update applies on the next launch, not live — **restart Claude Code**, the
 | `coAuthorTrailer` | `commit`, `review-pr` | **Default `false`.** Opt in to an AI co-author commit trailer |
 | `prFooter` | `open-pr` | **Default `false`.** Opt in to a "Generated with Claude Code" PR footer |
 
-## Skills (v1.6.0)
+## Skills (v1.7.0)
 
 **Getting started**
 
