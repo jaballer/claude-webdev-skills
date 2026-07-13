@@ -13,7 +13,7 @@ description: >
 # Fix CI
 
 Turn a red check green the honest way: find the real failure, reproduce it, fix the **cause**.
-Resolve project commands via `/webdev:detect-stack`.
+Resolve project commands via the plugin scripts: `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command <test|lint|typecheck|build>`.
 
 ## Hard rule: fix the cause, never the signal
 
@@ -113,7 +113,14 @@ type; it determines the fix path:
 
 ## Step 4: Reproduce locally before fixing
 
-Run the local equivalent of the failing step (resolved test/lint/typecheck/build command).
+Run the local equivalent of the failing step. Capture the resolved command **first** so an
+unresolved key aborts instead of silently running nothing — command substitution inside
+`bash -c "$(…)"` discards `resolve-command`'s non-zero exit, so `bash -c "$(false)"` still exits 0:
+
+```bash
+CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command <test|lint|typecheck|build>)" || exit 1
+bash -c "$CMD"
+```
 
 - **Fails locally too** → good, you have a fast feedback loop. Fix, re-run locally until green.
 - **Green locally, red in CI** → don't guess-push. Read the workflow file (`.github/workflows/…`)

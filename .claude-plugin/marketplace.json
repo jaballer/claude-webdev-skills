@@ -10,7 +10,7 @@
     {
       "name": "webdev",
       "source": "./plugins/webdev",
-      "description": "Portable web dev workflow that auto-detects your stack (JS/TS, PHP, Python). Branch, plan, test, commit, open and review PRs — beginner-safe defaults, power-user overrides via .claude/webdev.json."
+      "description": "Portable web dev workflow that auto-detects your stack (JS/TS, PHP). Branch, plan, test, commit, open and review PRs — beginner-safe defaults, power-user overrides via .claude/webdev.json."
     }
   ]
 }

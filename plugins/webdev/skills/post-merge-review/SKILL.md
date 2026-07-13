@@ -47,7 +47,7 @@ Document failures as findings — don't fix yet (Step 8).
 ## Step 6: Static analysis
 Run the project's resolved checks (skip any that don't apply to the stack):
 - **Build / type-check** — the resolved build and type-check commands (per `/webdev:detect-stack`); confirm it compiles.
-- **Lint / format check** — the resolved lint command in check mode (e.g. `eslint`, `biome check`, `pint --test`, `ruff check`).
+- **Lint / format check** — the resolved lint command in check mode (e.g. `eslint`, `biome check`, `pint --test`, `phpstan analyse`).
 - **Framework integrity** — if the framework offers a route/view/config compile check (e.g. route list, template compile), run it to catch broken wiring.
 
 **Comment-quality check** (linters catch formatting, not intent): scan added code for comments that

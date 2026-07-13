@@ -1,0 +1,672 @@
+#!/usr/bin/env python3
+"""
+Detect a web project's stack and resolve the commands other webdev skills run.
+
+Outputs a JSON stack profile. When called with --key <name>, prints only that
+command value. This is used by scripts/resolve-command.
+
+Resolution order:
+1. .claude/webdev.json overrides are authoritative.
+2. Detected values fill any missing keys.
+3. commandPrefix is prepended to detected commands only, never to pinned ones.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+DEFAULT_BRANCH_PREFIXES = ["feature", "fix", "refactor", "docs", "chore", "review"]
+
+
+def load_json(path: Path) -> Optional[Any]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def find(root: Path, *names: str) -> Optional[Path]:
+    for name in names:
+        p = root / name
+        if p.exists():
+            return p
+    return None
+
+
+def find_any(root: Path, patterns: List[str]) -> Optional[Path]:
+    for pat in patterns:
+        found = list(root.glob(pat))
+        if found:
+            return found[0]
+    return None
+
+
+def package_json(root: Path) -> Optional[Dict[str, Any]]:
+    return load_json(root / "package.json")
+
+
+PM_INSTALL = {
+    "pnpm": "pnpm install",
+    "yarn": "yarn install",
+    "bun": "bun install",
+    "npm": "npm install",
+    "composer": "composer install",
+}
+
+
+def install_for_pm(package_manager: str) -> str:
+    """Return the standard install command for a package manager, or ''."""
+    return PM_INSTALL.get(package_manager, "")
+
+
+# JS lockfiles in detection-priority order, paired with their manager.
+JS_LOCKFILES = [
+    ("pnpm-lock.yaml", "pnpm"),
+    ("yarn.lock", "yarn"),
+    ("bun.lockb", "bun"),
+    ("bun.lock", "bun"),
+    ("package-lock.json", "npm"),
+]
+
+
+def js_lockfiles_present(root: Path) -> List[str]:
+    """Return the JS lockfile names present in root, in priority order."""
+    return [f for f, _ in JS_LOCKFILES if root.joinpath(f).exists()]
+
+
+def js_manager_from_lockfile(root: Path) -> str:
+    """Return the JS package manager implied by the first lockfile present, or ''."""
+    for f, pm in JS_LOCKFILES:
+        if root.joinpath(f).exists():
+            return pm
+    return ""
+
+
+def package_manager_and_install(root: Path, overrides: Dict[str, Any]) -> Tuple[str, str]:
+    """Return (package_manager, install_command) detected from lockfiles.
+
+    Composer (PHP) is checked before the JS managers: a Laravel/Symfony app
+    commonly ships a frontend lockfile (package-lock.json, etc.) too, and its
+    backend test/format tooling is the primary stack we want to resolve. A
+    frontend-only build command is expected to be pinned in webdev.json.
+    """
+    if root.joinpath("composer.lock").exists() or root.joinpath("composer.json").exists():
+        return "composer", "composer install"
+    if root.joinpath("pnpm-lock.yaml").exists():
+        return "pnpm", "pnpm install"
+    if root.joinpath("yarn.lock").exists():
+        return "yarn", "yarn install"
+    if root.joinpath("bun.lock").exists() or root.joinpath("bun.lockb").exists():
+        return "bun", "bun install"
+    if root.joinpath("package-lock.json").exists():
+        return "npm", "npm install"
+    # Corepack: a JS project may declare its manager via package.json's
+    # "packageManager" field (e.g. "pnpm@8.6.0") without committing a lockfile.
+    pkg = package_json(root)
+    if pkg:
+        declared = pkg.get("packageManager")
+        if isinstance(declared, str) and declared:
+            name = declared.split("@", 1)[0].strip()
+            if name in ("pnpm", "yarn", "bun", "npm"):
+                return name, install_for_pm(name)
+    return "unknown", ""
+
+
+def package_manager_exec(package_manager: str, command: str) -> str:
+    """Return the command that runs a package binary in the detected manager."""
+    if package_manager == "pnpm":
+        return f"pnpm exec {command}"
+    if package_manager == "npm":
+        return f"npx {command}"
+    if package_manager == "yarn":
+        # A bare yarn.lock is usually Yarn Classic (v1), which has no `yarn exec`.
+        # `yarn run <bin>` runs a node_modules/.bin binary in both Classic and Berry.
+        return f"yarn run {command}"
+    if package_manager == "bun":
+        return f"bunx {command}"
+    if package_manager == "composer":
+        return f"./vendor/bin/{command}"
+    return command
+
+
+def package_manager_run(package_manager: str, script: str) -> str:
+    """Return the command that runs a package.json / composer script."""
+    if package_manager == "npm":
+        return f"npm run {script}"
+    if package_manager == "yarn":
+        return f"yarn {script}"
+    if package_manager == "bun":
+        return f"bun run {script}"
+    if package_manager == "composer":
+        return f"composer {script}"
+    return f"{package_manager} {script}"
+
+
+def detect_framework(root: Path, pkg: Optional[Dict[str, Any]]) -> str:
+    # PHP (Composer) is checked before the JS package.json: a Laravel/Symfony app
+    # commonly carries a frontend package.json too, and its backend framework is the
+    # one that drives test/dev/migration commands. composer.json is PHP-exclusive,
+    # so this never steals a match from a pure JS project.
+    if root.joinpath("composer.json").exists():
+        composer = load_json(root / "composer.json") or {}
+        if "laravel/framework" in composer.get("require", {}):
+            return "laravel"
+        if any(k.startswith("symfony/") for k in composer.get("require", {})):
+            return "symfony"
+    if pkg is not None:
+        deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
+        # Framework-specific entries come before the generic bundler ("vite") so
+        # that e.g. a Vite + Vue app resolves to "vue" (→ vue-tsc), not "vite".
+        for fw in [
+            "next", "nuxt", "@remix-run/react", "astro", "@sveltejs/kit",
+            "svelte", "vue", "vite", "react", "@nestjs/core", "express",
+        ]:
+            if fw in deps:
+                return fw.replace("@remix-run/react", "remix").replace("@nestjs/core", "nestjs")
+    return ""
+
+
+def run_script_or(pkg: Optional[Dict[str, Any]], package_manager: str, script: str, fallback: str) -> str:
+    scripts = (pkg or {}).get("scripts", {})
+    if script in scripts:
+        return package_manager_run(package_manager, script)
+    return fallback
+
+
+def js_test(pkg: Optional[Dict[str, Any]], package_manager: str, root: Path) -> Tuple[str, str]:
+    scripts = (pkg or {}).get("scripts", {})
+    if "test" in scripts:
+        return package_manager_run(package_manager, "test"), "package.json"
+    if find_any(root, ["vitest.config.*", "vitest.workspace.*"]):
+        return f"{package_manager_exec(package_manager, 'vitest')} --run", "vitest.config"
+    if find_any(root, ["jest.config.*", "jest.config.js", "jest.config.ts"]):
+        return package_manager_exec(package_manager, "jest"), "jest.config"
+    if find_any(root, ["playwright.config.*"]):
+        return f"{package_manager_exec(package_manager, 'playwright')} test", "playwright.config"
+    deps = set((pkg or {}).get("dependencies", {}).keys()) | set((pkg or {}).get("devDependencies", {}).keys())
+    if "vitest" in deps:
+        return f"{package_manager_exec(package_manager, 'vitest')} --run", "package.json"
+    if "jest" in deps:
+        return package_manager_exec(package_manager, "jest"), "package.json"
+    if "playwright" in deps or "@playwright/test" in deps:
+        return f"{package_manager_exec(package_manager, 'playwright')} test", "package.json"
+    return "", ""
+
+
+def _js_deps(pkg: Optional[Dict[str, Any]]) -> set[str]:
+    return set((pkg or {}).get("dependencies", {}).keys()) | set((pkg or {}).get("devDependencies", {}).keys())
+
+
+def js_format(pkg: Optional[Dict[str, Any]], package_manager: str, root: Path) -> Tuple[str, str]:
+    scripts = (pkg or {}).get("scripts", {})
+    if "format" in scripts:
+        return package_manager_run(package_manager, "format"), "package.json"
+    if find(root, "biome.json", "biome.jsonc"):
+        return f"{package_manager_exec(package_manager, 'biome')} format --write", "biome.json"
+    if find(root, "prettier.config.js") or find_any(root, [".prettierrc*", "prettier.config.*"]):
+        return f"{package_manager_exec(package_manager, 'prettier')} --write .", ".prettierrc"
+    if "prettier" in _js_deps(pkg):
+        return f"{package_manager_exec(package_manager, 'prettier')} --write .", "package.json"
+    if "eslint" in _js_deps(pkg):
+        return f"{package_manager_exec(package_manager, 'eslint')} --fix .", "package.json"
+    return "", ""
+
+
+def js_lint(pkg: Optional[Dict[str, Any]], package_manager: str, root: Path, format_cmd: str) -> Tuple[str, str]:
+    scripts = (pkg or {}).get("scripts", {})
+    if "lint" in scripts:
+        return package_manager_run(package_manager, "lint"), "package.json"
+    if find(root, "biome.json", "biome.jsonc"):
+        return f"{package_manager_exec(package_manager, 'biome')} check", "biome.json"
+    eslint = find_any(root, [".eslintrc*", "eslint.config.*"])
+    if eslint:
+        return f"{package_manager_exec(package_manager, 'eslint')} .", str(eslint.name)
+    if "eslint" in _js_deps(pkg):
+        return f"{package_manager_exec(package_manager, 'eslint')} .", "package.json"
+    prettier = find_any(root, [".prettierrc*", "prettier.config.*"])
+    if prettier and not find(root, "biome.json", "biome.jsonc"):
+        return f"{package_manager_exec(package_manager, 'prettier')} --check .", str(prettier.name)
+    if "prettier" in _js_deps(pkg):
+        return f"{package_manager_exec(package_manager, 'prettier')} --check .", "package.json"
+    return "", ""
+
+
+def js_typecheck(pkg: Optional[Dict[str, Any]], package_manager: str, root: Path, framework: str) -> Tuple[str, str]:
+    scripts = (pkg or {}).get("scripts", {})
+    for key in ["typecheck", "type-check"]:
+        if key in scripts:
+            return package_manager_run(package_manager, key), "package.json"
+    # Svelte/SvelteKit type-check .svelte SFCs with svelte-check; the scaffold
+    # exposes it as the `check` script, and it applies with or without tsconfig.
+    if framework in ("svelte", "@sveltejs/kit"):
+        if "check" in scripts:
+            return package_manager_run(package_manager, "check"), "package.json"
+        return f"{package_manager_exec(package_manager, 'svelte-check')}", "svelte-check"
+    # Nuxt's own checker runs vue-tsc across the app to catch .vue SFC diagnostics
+    # that plain tsc misses; it doesn't require a tsconfig.json.
+    if framework == "nuxt":
+        return f"{package_manager_exec(package_manager, 'nuxt')} typecheck", "framework"
+    if not find(root, "tsconfig.json"):
+        return "", ""
+    if framework == "vue":
+        return f"{package_manager_exec(package_manager, 'vue-tsc')} --noEmit", "tsconfig.json"
+    if framework == "astro":
+        return f"{package_manager_exec(package_manager, 'astro')} check", "tsconfig.json"
+    return f"{package_manager_exec(package_manager, 'tsc')} --noEmit", "tsconfig.json"
+
+
+def js_dev(pkg: Optional[Dict[str, Any]], package_manager: str, root: Path, framework: str) -> Tuple[str, str]:
+    scripts = (pkg or {}).get("scripts", {})
+    if "dev" in scripts:
+        return package_manager_run(package_manager, "dev"), "package.json"
+    if framework == "next":
+        return f"{package_manager_exec(package_manager, 'next')} dev", "framework"
+    if framework == "nuxt":
+        return f"{package_manager_exec(package_manager, 'nuxt')} dev", "framework"
+    if framework == "astro":
+        return f"{package_manager_exec(package_manager, 'astro')} dev", "framework"
+    if framework == "remix":
+        return f"{package_manager_exec(package_manager, 'remix')} dev", "framework"
+    if find_any(root, ["vite.config.*"]):
+        return f"{package_manager_exec(package_manager, 'vite')}", "vite.config"
+    # Express, Create React App, and many plain-Node apps expose only `start`.
+    if "start" in scripts:
+        return package_manager_run(package_manager, "start"), "package.json"
+    return "", ""
+
+
+def js_build(pkg: Optional[Dict[str, Any]], package_manager: str, root: Path, framework: str) -> Tuple[str, str]:
+    scripts = (pkg or {}).get("scripts", {})
+    if "build" in scripts:
+        return package_manager_run(package_manager, "build"), "package.json"
+    if framework == "next":
+        return f"{package_manager_exec(package_manager, 'next')} build", "framework"
+    if framework == "nuxt":
+        return f"{package_manager_exec(package_manager, 'nuxt')} build", "framework"
+    if framework == "astro":
+        return f"{package_manager_exec(package_manager, 'astro')} build", "framework"
+    if find_any(root, ["vite.config.*"]):
+        return f"{package_manager_exec(package_manager, 'vite')} build", "vite.config"
+    return "", ""
+
+
+def _composer_requires(root: Path) -> Dict[str, Any]:
+    composer = load_json(root / "composer.json") or {}
+    return {**composer.get("require", {}), **composer.get("require-dev", {})}
+
+
+def _has_pest(root: Path) -> bool:
+    # Pest's config lives at tests/Pest.php in a standard install, and phpunit.xml
+    # is present alongside it — so check for Pest explicitly rather than letting the
+    # PHPUnit branch win.
+    if find(root, "tests/Pest.php") or find(root, "Pest.php"):
+        return True
+    return "pestphp/pest" in _composer_requires(root)
+
+
+def _has_pint(root: Path) -> bool:
+    # Require explicit evidence Pint is actually present: a pint.json config or the
+    # laravel/pint dependency. Don't infer it from laravel/framework alone — the
+    # binary may not be installed, so resolving ./vendor/bin/pint would then fail.
+    if find(root, "pint.json"):
+        return True
+    return "laravel/pint" in _composer_requires(root)
+
+
+def php_test(root: Path, package_manager: str) -> Tuple[str, str]:
+    # Prefer a composer.json script (mirrors the JS package.json path): projects
+    # often wrap PHPUnit/Pest with env flags there, or run without a phpunit.xml.
+    composer = load_json(root / "composer.json") or {}
+    if "test" in composer.get("scripts", {}):
+        return "composer test", "composer.json"
+    if _has_pest(root):
+        return "./vendor/bin/pest", "pest"
+    if find(root, "phpunit.xml") or find(root, "phpunit.xml.dist"):
+        return "./vendor/bin/phpunit", "phpunit.xml"
+    return "", ""
+
+
+def php_format(root: Path, package_manager: str) -> Tuple[str, str]:
+    # Prefer a composer.json script, mirroring php_test and the JS path.
+    composer = load_json(root / "composer.json") or {}
+    if "format" in composer.get("scripts", {}):
+        return "composer format", "composer.json"
+    if _has_pint(root):
+        return "./vendor/bin/pint", "pint"
+    if find_any(root, [".php-cs-fixer.php", ".php-cs-fixer.dist.php"]):
+        return "./vendor/bin/php-cs-fixer fix", ".php-cs-fixer"
+    return "", ""
+
+
+def php_lint(root: Path, package_manager: str, format_cmd: str) -> Tuple[str, str]:
+    composer = load_json(root / "composer.json") or {}
+    if "lint" in composer.get("scripts", {}):
+        return "composer lint", "composer.json"
+    if _has_pint(root):
+        return "./vendor/bin/pint --test", "pint"
+    if find_any(root, [".php-cs-fixer.php", ".php-cs-fixer.dist.php"]):
+        return "./vendor/bin/php-cs-fixer fix --dry-run", ".php-cs-fixer"
+    if find(root, "phpstan.neon") or find(root, "phpstan.neon.dist"):
+        return "./vendor/bin/phpstan analyse", "phpstan.neon"
+    if find(root, "psalm.xml"):
+        return "./vendor/bin/psalm", "psalm.xml"
+    return "", ""
+
+
+def php_typecheck(root: Path, package_manager: str) -> Tuple[str, str]:
+    if find(root, "phpstan.neon") or find(root, "phpstan.neon.dist"):
+        return "./vendor/bin/phpstan analyse", "phpstan.neon"
+    if find(root, "psalm.xml"):
+        return "./vendor/bin/psalm", "psalm.xml"
+    return "", ""
+
+
+def php_dev(root: Path, framework: str) -> Tuple[str, str]:
+    # Modern Laravel apps run the whole stack (server + Vite + queue + logs) via a
+    # composer `dev` script; prefer it over the bare artisan server.
+    composer = load_json(root / "composer.json") or {}
+    if "dev" in composer.get("scripts", {}):
+        return "composer dev", "composer.json"
+    if framework == "laravel":
+        return "php artisan serve", "framework"
+    return "", ""
+
+
+def php_build(root: Path, framework: str) -> Tuple[str, str]:
+    # A composer `build` script wins; otherwise a Laravel/Symfony app usually
+    # builds frontend assets from package.json (Vite), so resolve that through the
+    # frontend lockfile's manager rather than reporting no build command.
+    composer = load_json(root / "composer.json") or {}
+    if "build" in composer.get("scripts", {}):
+        return "composer build", "composer.json"
+    pkg = load_json(root / "package.json") or {}
+    if "build" in pkg.get("scripts", {}):
+        js_pm = js_manager_from_lockfile(root)
+        if js_pm:
+            return package_manager_run(js_pm, "build"), "package.json"
+    return "", ""
+
+
+def migration_command(root: Path, package_manager: str, framework: str) -> Tuple[str, str]:
+    if framework == "laravel":
+        return "php artisan migrate:status", "framework"
+    # Prisma is used from many Node stacks (Express, Nest, Vite, plain Node), not
+    # just Next.js — key off the prisma/ directory and a JS manager, not framework.
+    if find(root, "prisma") and package_manager in ("pnpm", "npm", "yarn", "bun"):
+        return f"{package_manager_exec(package_manager, 'prisma')} migrate status", "prisma"
+    return "", ""
+
+
+def detect_workspace(root: Path, pkg: Optional[Dict[str, Any]]) -> str:
+    if root.joinpath("pnpm-workspace.yaml").exists():
+        return "pnpm-workspace"
+    if root.joinpath("turbo.json").exists():
+        return "turbo"
+    if root.joinpath("nx.json").exists():
+        return "nx"
+    if root.joinpath("lerna.json").exists():
+        return "lerna"
+    if pkg and isinstance(pkg.get("workspaces"), (list, dict)):
+        return "package.json"
+    return ""
+
+
+def default_branch(root: Path) -> str:
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
+            capture_output=True, text=True, cwd=str(root)
+        )
+        if result.returncode == 0 and result.stdout:
+            ref = result.stdout.strip()
+            # Strip the fixed refs/remotes/origin/ prefix rather than splitting on
+            # every slash, so a slashed default branch (release/1.x) survives.
+            prefix = "refs/remotes/origin/"
+            return ref[len(prefix):] if ref.startswith(prefix) else ref.split("/")[-1]
+        for branch in ["main", "master"]:
+            result = subprocess.run(
+                ["git", "rev-parse", "--verify", branch],
+                capture_output=True, cwd=str(root)
+            )
+            if result.returncode == 0:
+                return branch
+    except Exception:
+        pass
+    return "main"
+
+
+def merge_method(root: Path) -> str:
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["git", "config", "--get", "merge.ff"],
+            capture_output=True, text=True, cwd=str(root)
+        )
+        if result.returncode == 0 and result.stdout.strip() == "false":
+            return "merge"
+    except Exception:
+        pass
+    return "squash"
+
+
+def apply_prefix(command: str, prefix: str) -> str:
+    if not prefix or not command:
+        return command
+    return f"{prefix} {command}"
+
+
+def detect(root: Path, overrides: Dict[str, Any]) -> Dict[str, Any]:
+    pkg = package_json(root)
+    pm, install = package_manager_and_install(root, overrides)
+    framework = detect_framework(root, pkg)
+
+    if "packageManager" in overrides:
+        pm = overrides["packageManager"]
+        # A pinned package manager implies its standard install command unless the
+        # user pinned install explicitly (handled below). Otherwise a project that
+        # pinned only packageManager gets a stale/empty install command.
+        if "install" not in overrides:
+            install = install_for_pm(pm) or install
+    if "install" in overrides:
+        install = overrides["install"]
+
+    if pm in ("pnpm", "npm", "yarn", "bun"):
+        test, test_src = js_test(pkg, pm, root)
+        fmt, fmt_src = js_format(pkg, pm, root)
+        lint, lint_src = js_lint(pkg, pm, root, fmt)
+        typecheck, typecheck_src = js_typecheck(pkg, pm, root, framework)
+        dev, dev_src = js_dev(pkg, pm, root, framework)
+        build, build_src = js_build(pkg, pm, root, framework)
+    elif pm == "composer":
+        test, test_src = php_test(root, pm)
+        fmt, fmt_src = php_format(root, pm)
+        lint, lint_src = php_lint(root, pm, fmt)
+        typecheck, typecheck_src = php_typecheck(root, pm)
+        dev, dev_src = php_dev(root, framework)
+        build, build_src = php_build(root, framework)
+    else:
+        test = fmt = lint = typecheck = dev = build = ""
+        test_src = fmt_src = lint_src = typecheck_src = dev_src = build_src = ""
+
+    migration, migration_src = migration_command(root, pm, framework)
+    workspace = detect_workspace(root, pkg)
+
+    defaults: Dict[str, Any] = {
+        "packageManager": pm,
+        "install": install,
+        "test": test,
+        "format": fmt,
+        "lint": lint,
+        "typecheck": typecheck,
+        "dev": dev,
+        "build": build,
+        "framework": framework,
+        "migrationStatus": migration,
+        "workspace": workspace,
+        "defaultBranch": default_branch(root),
+        "mergeMethod": merge_method(root),
+        "branchPrefixes": DEFAULT_BRANCH_PREFIXES,
+        "commandPrefix": "",
+    }
+
+    sources: Dict[str, str] = {
+        "packageManager": "detected" if pm != "unknown" else "",
+        "install": "detected",
+        "test": test_src,
+        "format": fmt_src,
+        "lint": lint_src,
+        "typecheck": typecheck_src,
+        "dev": dev_src,
+        "build": build_src,
+        "framework": "detected" if framework else "",
+        "migrationStatus": migration_src,
+        "workspace": "detected" if workspace else "",
+        "defaultBranch": "detected",
+        "mergeMethod": "detected",
+        "branchPrefixes": "default",
+        "commandPrefix": "",
+    }
+
+    resolved: Dict[str, Any] = {}
+    for key in defaults:
+        if key in overrides:
+            resolved[key] = overrides[key]
+            sources[key] = "webdev.json"
+        else:
+            resolved[key] = defaults[key]
+
+    command_prefix = resolved.get("commandPrefix", "")
+    # Prefix applies to detected commands, not to pinned ones.
+    command_keys = ["install", "test", "format", "lint", "typecheck", "dev", "build", "migrationStatus"]
+    for key in command_keys:
+        if sources[key] != "webdev.json" and resolved.get(key):
+            resolved[key] = apply_prefix(resolved[key], command_prefix)
+
+    # Compute gaps from the RESOLVED profile, after overrides are applied, so a
+    # pinned command (test, packageManager, …) clears a gap that filesystem
+    # detection alone could not.
+    gaps: List[str] = []
+    # A custom/unsupported stack that pins its runnable commands in webdev.json is
+    # a supported path (per the "any other stack" docs) — don't flag a missing
+    # package manager when the user has deliberately pinned commands.
+    pinned_commands = [k for k in command_keys if sources.get(k) == "webdev.json" and resolved.get(k)]
+    if resolved.get("packageManager") in ("unknown", "", None) and not pinned_commands:
+        gaps.append("No supported lockfile or package manager found.")
+    # Multiple JS lockfiles (e.g. a mid-migration repo) make the manager ambiguous;
+    # only when a JS manager was auto-selected and not pinned. Composer wins earlier,
+    # so PHP backends with a frontend lockfile don't trip this.
+    pm_ambiguous = False
+    if (
+        resolved.get("packageManager") in ("pnpm", "yarn", "bun", "npm")
+        and sources.get("packageManager") != "webdev.json"
+    ):
+        js_locks = js_lockfiles_present(root)
+        if len(js_locks) > 1:
+            pm_ambiguous = True
+            gaps.append(
+                "Multiple JS lockfiles present (" + ", ".join(js_locks) + ") — ambiguous "
+                "package manager; pin packageManager in .claude/webdev.json."
+            )
+    if not resolved.get("test"):
+        if resolved.get("workspace"):
+            gaps.append(
+                f"Monorepo detected ({resolved['workspace']}) but no test command "
+                "resolved at the repo root — pin commands in .claude/webdev.json or "
+                "run from the target workspace package."
+            )
+        else:
+            gaps.append("Could not determine a test runner.")
+
+    resolved["gaps"] = gaps
+    resolved["packageManagerAmbiguous"] = pm_ambiguous
+    resolved["sources"] = sources
+    resolved["webdevJsonPath"] = str((root / ".claude" / "webdev.json").resolve()) if (root / ".claude" / "webdev.json").exists() else None
+    return resolved
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Detect a web project stack and output a JSON profile.")
+    parser.add_argument("--root", default=None, help="Project root directory (default: current directory)")
+    parser.add_argument("--key", default=None, help="Print only the value for this key")
+    args = parser.parse_args()
+
+    root = Path(args.root).resolve() if args.root else Path.cwd()
+
+    webdev_path = root / ".claude" / "webdev.json"
+    overrides: Dict[str, Any] = {}
+    if webdev_path.exists():
+        # A present-but-unparseable override file must fail loudly: silently
+        # falling back to {} would discard the user's pinned commands and
+        # commandPrefix, running auto-detected host commands instead.
+        loaded = load_json(webdev_path)
+        if loaded is None:
+            print(
+                f"detect-stack: {webdev_path} exists but is not valid JSON — "
+                "fix the file or remove it.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        if not isinstance(loaded, dict):
+            # A valid but non-object payload (array/scalar) would crash detect()
+            # on string-key indexing, or silently act as no overrides.
+            print(
+                f"detect-stack: {webdev_path} must be a JSON object of "
+                "key/command overrides — fix the file or remove it.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        overrides = loaded
+
+    profile = detect(root, overrides)
+
+    if args.key:
+        # Accept the legacy "migration" alias for the documented "migrationStatus".
+        key = {"migration": "migrationStatus"}.get(args.key, args.key)
+        if key not in profile:
+            print(f"detect-stack: unknown key {args.key!r}", file=sys.stderr)
+            sys.exit(1)
+        value = profile.get(key)
+        # A command key that resolves to nothing must fail loudly instead of
+        # printing an empty string that callers would run as `bash -c ""` (a
+        # silent success that runs nothing). Non-command keys may be empty.
+        command_keys = {
+            "install", "test", "format", "lint", "typecheck", "dev", "build", "migrationStatus",
+        }
+        pinned = profile.get("sources", {}).get(key) == "webdev.json"
+        # Exit codes let callers distinguish a clean "no command for this stack"
+        # (3 → optional gate skips) from an unsafe/error state (4 → gate aborts).
+        # An ambiguous package manager would resolve every command through a
+        # first-match guess; refuse to hand callers a possibly-wrong command
+        # (they run these directly and never see the gaps array). A command pinned
+        # verbatim in webdev.json is complete on its own and safe to return.
+        if key in command_keys and profile.get("packageManagerAmbiguous") and not pinned:
+            print(
+                "detect-stack: ambiguous package manager (multiple JS lockfiles) — "
+                f"cannot safely resolve {key!r}; pin packageManager in .claude/webdev.json.",
+                file=sys.stderr,
+            )
+            sys.exit(4)
+        if key in command_keys and (value is None or value == ""):
+            print(
+                f"detect-stack: no {key!r} command resolved for this stack — "
+                "pin it in .claude/webdev.json or install a supported tool.",
+                file=sys.stderr,
+            )
+            sys.exit(3)
+        if isinstance(value, (list, dict, bool, type(None))):
+            print(json.dumps(value), flush=True)
+        else:
+            print(value, flush=True)
+        return
+
+    print(json.dumps(profile, indent=2), flush=True)
+
+
+if __name__ == "__main__":
+    main()

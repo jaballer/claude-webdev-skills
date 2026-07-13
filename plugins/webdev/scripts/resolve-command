@@ -1,0 +1,5 @@
+#!/bin/sh
+# Resolve a single command key by delegating to detect-stack.
+# Usage: scripts/resolve-command <key>
+# Example: scripts/resolve-command test
+exec "$(dirname "$0")/detect-stack" --key "$1"

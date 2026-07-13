@@ -11,7 +11,7 @@ description: >
 # Commit
 
 Work through these steps in order. Skipping steps (especially tests and the self-review)
-risks shipping broken code. Resolve all project commands via `/webdev:detect-stack`.
+risks shipping broken code. Resolve project commands via the plugin scripts: run `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command format` for the formatter and `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command lint` for the linter.
 
 ## 1. Confirm you're on a working branch
 
@@ -31,9 +31,23 @@ PR. Whatever scope you run must pass before committing — fix failures before s
 
 ## 3. Run the formatter / linter
 
-Run the resolved format command (e.g. `prettier --write`, `biome format --write`, `pint`,
-`ruff format`). If it modifies files, stage those too. If a linter is configured, run it and fix
-violations now.
+Run the resolved format command to write files. Capture it **first** — never inline the
+substitution into `bash -c "$(…)"`, since `bash -c "$(false)"` exits 0 and silently turns the
+gate into a no-op. Then **branch on the exit code**, because "no formatter for this stack" and
+"config is broken" are different outcomes: `resolve-command` exits `3` when a stack legitimately
+has no such command (a clean skip), but `2` (invalid `.claude/webdev.json`) or `4` (ambiguous
+package manager) mean the setup is unsafe and the gate must abort — not silently skip:
+
+```bash
+FMT="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command format)"; rc=$?
+if [ "$rc" -eq 0 ]; then bash -c "$FMT"
+elif [ "$rc" -eq 3 ]; then echo "format: N/A for this stack"
+else echo "format: resolver error (exit $rc) — fix config before committing"; exit "$rc"; fi
+```
+
+If it modifies files, stage those too. If a linter is configured, run it with the **same
+exit-code branching** (swap `format`→`lint`) and fix violations now. Only exit `3` is a clean
+skip; `2`/`4` abort.
 
 > **Agent Delegation:** steps 2 and 3 are independent — run them as parallel sub-agents (tests
 > at scope · formatter). If either fails, stop and fix before step 5. If the formatter changed

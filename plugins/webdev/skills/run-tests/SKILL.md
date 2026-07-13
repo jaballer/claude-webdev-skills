@@ -5,15 +5,20 @@ description: >
   the user asks to "run tests", "check tests", "make sure tests pass", or before
   committing or opening a PR. Also trigger automatically after code changes that could
   affect existing functionality. Resolves the test command via /webdev:detect-stack, so
-  it works on any stack (vitest, jest, phpunit, pest, pytest, …).
+  it works on any stack (vitest, jest, phpunit, pest, …).
 ---
 
 # Run Tests
 
-Stack-agnostic. **Resolve the test command through `/webdev:detect-stack`** (which honors
-`.claude/webdev.json` first, then detection) — never assume `npm test` or `phpunit`. Apply
-the project's `commandPrefix` to a **detected** command (e.g. `ddev exec`); a command pinned
-in `webdev.json` is already complete — use it verbatim.
+Stack-agnostic. **Resolve the test command through `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command test`**, which honors `.claude/webdev.json` first, then detection — never assume `npm test` or `phpunit`. The script applies `commandPrefix` to detected commands; a command pinned in `webdev.json` is already complete. Capture it first and bail if nothing resolved — the script exits non-zero and prints why (rather than returning an empty string that would run as `bash -c ""`, a silent no-op):
+
+```bash
+TEST_CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command test)" || exit 1   # message already on stderr
+bash -c "$TEST_CMD"                                # full run
+bash -c "$TEST_CMD tests/Feature/FooTest.php"      # targeted — filter goes INSIDE the command string
+```
+
+**Append the runner filter (file path or `-t`/`--filter "name"`) inside the same quoted command string, not after `bash -c "$TEST_CMD"`.** With `bash -c`, words after the command string become positional parameters to `bash` (`$0`, `$1`, …), not arguments to the test runner — so `bash -c "$TEST_CMD" path/to/file` runs the full suite and silently ignores the filter.
 
 ## Decision Logic — default to the smallest run that proves the change
 
@@ -61,9 +66,13 @@ Use the resolved test command, then narrow it with the runner's native filter:
 | vitest / jest | `<test>` | `<test> path/to/file.test.ts` | `<test> -t "name"` |
 | phpunit | `<test>` | `<test> tests/Feature/FooTest.php` | `<test> --filter test_name` |
 | pest | `<test>` | `<test> tests/Feature/FooTest.php` | `<test> --filter "name"` |
-| pytest | `<test>` | `<test> tests/test_foo.py` | `<test> -k "name"` |
 
-`<test>` is the resolved command (incl. `commandPrefix`). If tests behave unexpectedly,
+`<test>` is the resolved command (incl. `commandPrefix`). **When `<test>` is an npm script**
+(e.g. `npm run test`), npm eats leading flags as its own — insert `--` before the runner's
+args: `npm run test -- path/to/file.test.ts` and `npm run test -- -t "name"`. pnpm/yarn/bun pass
+args through without the separator.
+
+If tests behave unexpectedly,
 clear caches/build artifacts first (framework-appropriate: `config:clear`, deleting
 `.vitest`/`node_modules/.cache`, etc.), then re-run.
 

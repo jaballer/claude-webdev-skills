@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "webdev",
   "displayName": "Web Dev Workflow",
-  "version": "1.6.0",
+  "version": "1.8.0",
   "description": "A stack-agnostic web development workflow for Claude Code. Auto-detects your package manager, test runner, and formatter, then drives a consistent branch → plan → test → commit → PR → review pipeline across any project. Works zero-config on standard setups; pin commands via .claude/webdev.json for custom stacks.",
   "author": {
     "name": "Jabal Torres",
