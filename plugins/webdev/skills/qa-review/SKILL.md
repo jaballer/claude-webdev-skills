@@ -49,7 +49,7 @@ Run the resolved checks that apply to the stack:
 non-obvious *why*, and empty/redundant docblocks. Surface in Style / Consistency Issues if present.
 
 ## Step 6: Database concerns
-Run the resolved migration-status command: `CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command migrationStatus)" && bash -c "$CMD"` (the `&&` skips it when the stack has no migration tooling). Are new migrations
+Run the resolved migration-status command, recording a clean N/A skip when the stack has no migration tooling (rather than a failed DB check): `if CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command migrationStatus)"; then bash -c "$CMD"; else echo "migrations: N/A for this stack"; fi`. Are new migrations
 reversible? Proper indexes on frequently-queried columns? Correct foreign-key constraints?
 
 ## Step 7: Documentation alignment

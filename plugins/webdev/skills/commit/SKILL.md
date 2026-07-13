@@ -31,17 +31,18 @@ PR. Whatever scope you run must pass before committing — fix failures before s
 
 ## 3. Run the formatter / linter
 
-Run the resolved format command to write files. Capture it **first** so an unresolved key
-fails the gate instead of running nothing — `bash -c "$(false)"` exits 0, silently turning a
-required gate into a no-op:
+Run the resolved format command to write files. Capture it **first** — never inline the
+substitution into `bash -c "$(…)"`, since `bash -c "$(false)"` exits 0 and silently turns the
+gate into a no-op. Branch on resolution so an **absent** formatter is a clean N/A skip while a
+resolved-but-failing command still surfaces:
 
 ```bash
-FMT="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command format)" && bash -c "$FMT"
+if FMT="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command format)"; then bash -c "$FMT"; else echo "format: N/A for this stack"; fi
 ```
 
 If it modifies files, stage those too. If a linter is configured, run it the same way
-(`LINT="$(… resolve-command lint)" && bash -c "$LINT"`) and fix violations now. A stack with no
-formatter/linter resolves to non-zero and is a clean skip, not a failure.
+(`if LINT="$(… resolve-command lint)"; then bash -c "$LINT"; else echo "lint: N/A"; fi`) and fix
+violations now. A stack with no formatter/linter is N/A, not a failed gate.
 
 > **Agent Delegation:** steps 2 and 3 are independent — run them as parallel sub-agents (tests
 > at scope · formatter). If either fails, stop and fix before step 5. If the formatter changed

@@ -224,6 +224,10 @@ def js_typecheck(pkg: Optional[Dict[str, Any]], package_manager: str, root: Path
         if "check" in scripts:
             return package_manager_run(package_manager, "check"), "package.json"
         return f"{package_manager_exec(package_manager, 'svelte-check')}", "svelte-check"
+    # Nuxt's own checker runs vue-tsc across the app to catch .vue SFC diagnostics
+    # that plain tsc misses; it doesn't require a tsconfig.json.
+    if framework == "nuxt":
+        return f"{package_manager_exec(package_manager, 'nuxt')} typecheck", "framework"
     if not find(root, "tsconfig.json"):
         return "", ""
     if framework == "vue":
@@ -280,12 +284,12 @@ def _has_pest(root: Path) -> bool:
 
 
 def _has_pint(root: Path) -> bool:
-    # A pint.json is explicit formatter config on its own; laravel/pint may also be
-    # used outside a Laravel app, and Laravel apps ship Pint by default.
+    # Require explicit evidence Pint is actually present: a pint.json config or the
+    # laravel/pint dependency. Don't infer it from laravel/framework alone — the
+    # binary may not be installed, so resolving ./vendor/bin/pint would then fail.
     if find(root, "pint.json"):
         return True
-    reqs = _composer_requires(root)
-    return "laravel/pint" in reqs or "laravel/framework" in reqs
+    return "laravel/pint" in _composer_requires(root)
 
 
 def php_test(root: Path, package_manager: str) -> Tuple[str, str]:
@@ -302,6 +306,10 @@ def php_test(root: Path, package_manager: str) -> Tuple[str, str]:
 
 
 def php_format(root: Path, package_manager: str) -> Tuple[str, str]:
+    # Prefer a composer.json script, mirroring php_test and the JS path.
+    composer = load_json(root / "composer.json") or {}
+    if "format" in composer.get("scripts", {}):
+        return "composer format", "composer.json"
     if _has_pint(root):
         return "./vendor/bin/pint", "pint"
     if find_any(root, [".php-cs-fixer*", ".php-cs-fixer.dist.*"]):
@@ -310,6 +318,9 @@ def php_format(root: Path, package_manager: str) -> Tuple[str, str]:
 
 
 def php_lint(root: Path, package_manager: str, format_cmd: str) -> Tuple[str, str]:
+    composer = load_json(root / "composer.json") or {}
+    if "lint" in composer.get("scripts", {}):
+        return "composer lint", "composer.json"
     if _has_pint(root):
         return "./vendor/bin/pint --test", "pint"
     if find_any(root, [".php-cs-fixer*", ".php-cs-fixer.dist.*"]):
@@ -508,6 +519,7 @@ def detect(root: Path, overrides: Dict[str, Any]) -> Dict[str, Any]:
     # Multiple JS lockfiles (e.g. a mid-migration repo) make the manager ambiguous;
     # only when a JS manager was auto-selected and not pinned. Composer wins earlier,
     # so PHP backends with a frontend lockfile don't trip this.
+    pm_ambiguous = False
     if (
         resolved.get("packageManager") in ("pnpm", "yarn", "bun", "npm")
         and sources.get("packageManager") != "webdev.json"
@@ -517,6 +529,7 @@ def detect(root: Path, overrides: Dict[str, Any]) -> Dict[str, Any]:
             if root.joinpath(f).exists()
         ]
         if len(js_locks) > 1:
+            pm_ambiguous = True
             gaps.append(
                 "Multiple JS lockfiles present (" + ", ".join(js_locks) + ") — ambiguous "
                 "package manager; pin packageManager in .claude/webdev.json."
@@ -532,6 +545,7 @@ def detect(root: Path, overrides: Dict[str, Any]) -> Dict[str, Any]:
             gaps.append("Could not determine a test runner.")
 
     resolved["gaps"] = gaps
+    resolved["packageManagerAmbiguous"] = pm_ambiguous
     resolved["sources"] = sources
     resolved["webdevJsonPath"] = str((root / ".claude" / "webdev.json").resolve()) if (root / ".claude" / "webdev.json").exists() else None
     return resolved
@@ -576,6 +590,16 @@ def main() -> None:
         command_keys = {
             "install", "test", "format", "lint", "typecheck", "dev", "build", "migrationStatus",
         }
+        # An ambiguous package manager would resolve every command through a
+        # first-match guess; refuse to hand callers a possibly-wrong command
+        # (they run these directly and never see the gaps array).
+        if key in command_keys and profile.get("packageManagerAmbiguous"):
+            print(
+                "detect-stack: ambiguous package manager (multiple JS lockfiles) — "
+                f"cannot safely resolve {key!r}; pin packageManager in .claude/webdev.json.",
+                file=sys.stderr,
+            )
+            sys.exit(3)
         if key in command_keys and (value is None or value == ""):
             print(
                 f"detect-stack: no {key!r} command resolved for this stack — "
