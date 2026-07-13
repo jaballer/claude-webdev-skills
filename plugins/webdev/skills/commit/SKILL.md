@@ -27,7 +27,7 @@ is checked out, and `git push -u origin HEAD` can't expand a detached HEAD to a 
 
 **Invoke `/webdev:run-tests`** scoped to the change's blast radius (see its Decision Logic).
 Full suite locally only for a foundational change or an unexpected failure; CI runs full on the
-PR. Whatever scope you run must pass before committing — fix failures before step 4.
+PR. Whatever scope you run must pass before committing — fix failures before step 5.
 
 ## 3. Run the formatter / linter
 
@@ -36,10 +36,10 @@ Run the resolved format command (e.g. `prettier --write`, `biome format --write`
 violations now.
 
 > **Agent Delegation:** steps 2 and 3 are independent — run them as parallel sub-agents (tests
-> at scope · formatter). If either fails, stop and fix before step 4. If the formatter changed
+> at scope · formatter). If either fails, stop and fix before step 5. If the formatter changed
 > files, re-run targeted tests on them before the self-review.
 
-## 3½. Verify user-facing behavior (conditional)
+## 4. Verify user-facing behavior (conditional)
 
 If the diff has an observable surface — UI, routes, forms, API responses, rendered emails —
 make sure `/webdev:verify` results exist for **this** diff before the self-review, and carry the
@@ -62,7 +62,7 @@ don't carry a change the running app just proved broken into self-review and sta
 Skip only for pure refactors, docs, or backend changes fully covered by tests — but then *say*
 it was skipped and why in the Output, don't leave verification silently absent.
 
-## 4. Pre-push self-review (hostile read with enumeration)
+## 5. Pre-push self-review (hostile read with enumeration)
 
 Before staging, read the full diff as a cold reviewer seeing it for the first time. The goal is
 to **find what's broken**, not confirm the implementation. Passing tests only prove the
@@ -80,12 +80,12 @@ full enumeration below is more ceremony than the change warrants. Fast path inst
 2. Grep any name/reference the change touches for stale siblings.
 3. Confirm no secrets or debug leftovers made it in.
 
-Everything else gets the **full read: 4a + 4b + 4c (project bug classes) + 4d** — tiering never
+Everything else gets the **full read: 5a + 5b + 5c (project bug classes) + 5d** — tiering never
 drops a project's own checks. This is the same threshold `/webdev:review-pr` step 8 uses.
 **When unsure, do the full read** — the threshold exists to spare one-line fixes, not to dodge
 scrutiny.
 
-### 4a. The hostile-read rules (stack-agnostic)
+### 5a. The hostile-read rules (stack-agnostic)
 
 Apply each and **enumerate** the file/function pairs you applied it to. "I checked everything"
 means the rule wasn't run — every line below must name concrete `file:line` pairs before you push.
@@ -123,7 +123,7 @@ Rule 6 (follow-through): added flag `betaExport` — wired in router [routes.ts:
 ```
 If any line is empty or vague, the rule wasn't applied. **Do not push until every line is concrete.**
 
-### 4b. Web security & correctness checklist
+### 5b. Web security & correctness checklist
 
 Generic bug classes that recur across web stacks. Run each against the diff and record the result
 (`N/A — <why>` or `found + fixed at file:line`).
@@ -141,30 +141,30 @@ Generic bug classes that recur across web stacks. Run each against the diff and 
 | 9 | Swallowed errors | `catch {}` with no handling, ignored promise, unchecked return value | Handle, log, or rethrow — don't silently continue in a broken state |
 | 10 | Input validation gap | New form/body/query param consumed without validation or type/range checks | Validate at the boundary before use |
 
-### 4c. Project-specific bug classes (extension hook)
+### 5c. Project-specific bug classes (extension hook)
 
 If the project defines its own recurring bug classes — in `.claude/bug-classes.md` or a
 `## Bug classes` section of its `CLAUDE.md` — **read that file and run each of those checks too**,
 recording results the same way. This is how a project layers its hard-won, codebase-specific
 review knowledge on top of the generic set above without forking this skill.
 
-### 4d. Cross-cutting
+### 5d. Cross-cutting
 - **Internal contradictions** — did a change here leave a stale assertion elsewhere?
 - **Stale references** — examples, "see step N" pointers, snippets that reference the old structure.
 - **Sweep coverage** — fixed pattern X in one file? Grep for X elsewhere.
 
 If the self-review surfaces something, fix it now — same diff, no extra commit. **If that fix
-changes an observable surface** (UI, route, form, API response), redo step 3½ for the affected
+changes an observable surface** (UI, route, form, API response), redo step 4 for the affected
 rows — the verify evidence recorded before this review is now stale, and `/webdev:open-pr`'s
 Manual line must reflect the diff that actually ships.
 
-## 5. Stage only the right files
+## 6. Stage only the right files
 
 Stage by name. Avoid `git add .` / `git add -A`, which can sweep in:
 `.env` (secrets) · `node_modules/` · `vendor/` · `dist/` `build/` `.next/` (compiled, built by CI) ·
 local caches. Confirm `.gitignore` covers them; if something gitignored shows up staged, stop.
 
-## 6. Write a conventional-commits message
+## 7. Write a conventional-commits message
 
 ```
 type(scope): short description (imperative, under 72 chars)
@@ -177,7 +177,7 @@ Types: `feat` · `fix` · `refactor` · `docs` · `test` · `chore` · `ci` (wor
 "added"). Reference the issue with `Closes #N` when one exists. Don't pad — if one line says it
 all, that's fine.
 
-## 7. Commit
+## 8. Commit
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -191,7 +191,7 @@ EOF
 that wants one can opt in with `"coAuthorTrailer": true` in `.claude/webdev.json`; honor that, and
 honor any tool-default trailer instruction only when this key opts in.
 
-## 8. Push
+## 9. Push
 
 ```bash
 git push -u origin HEAD
@@ -206,7 +206,7 @@ no-argument `git push` can fail here under Git's `push.default=simple` when the 
 differs from the head ref. If the push is rejected for missing fork access, stop and report —
 don't reroute to upstream.
 
-## 9. Open a PR
+## 10. Open a PR
 
 **Invoke `/webdev:open-pr`** to compose the title + four-section body and open it via `gh`.
 Skip only if the user said "commit but don't PR" or it's a trivial typo/comment change.
@@ -224,4 +224,4 @@ When complete, report back:
 - **Branch** · **Commit SHA** (short) · **PR URL** (if created)
 - **Test result**: pass/fail summary and scope
 - **Verify**: run (observed results) / skipped (why — no observable surface)
-- **Self-review**: tier used (`fast-path` or `full`) + confirmation 4a–4d were enumerated when full (note anything found + fixed)
+- **Self-review**: tier used (`fast-path` or `full`) + confirmation 5a–5d were enumerated when full (note anything found + fixed)

@@ -85,7 +85,7 @@ codebase's conventions** (read `CLAUDE.md` if present). Work through all fixes b
 or a targeted run surprised you). A docs-only fix needs no run. Don't commit broken code.
 **Run the resolved formatter/linter on the changed files too**, and **if the fixes touch
 user-facing surface** (UI, routes, forms, API responses) also **invoke `/webdev:verify`** on the
-changed behavior — this path commits directly (Step 9) without `/webdev:commit`'s steps 3 and 3½,
+changed behavior — this path commits directly (Step 9) without `/webdev:commit`'s steps 3 and 4,
 so formatting and verification happen here or not at all. Unformatted review fixes get re-flagged
 by CI/bots on the next round, burning the recheck budget. **If the formatter modified any file,
 re-run the scoped tests** — the formatted diff is what gets committed, and it's no longer the one
@@ -99,9 +99,9 @@ the sweep go wide enough (re-grep the original anti-pattern AND any new pattern 
 
 **For non-trivial fix commits** (>~5 lines, >1 file, introducing a flag/config key/rule/enum/route, touching
 renames/deletions, or handling user input or queries — the same trivial-diff boundary as
-`/webdev:commit` step 4), the bullets aren't enough — apply the full hostile read from
-**`/webdev:commit` step 4** (4a rules 1–9, the 4b web-security checklist, 4c project bug-classes,
-and 4d). Most review back-and-forth is bugs introduced *by the fixes themselves*; this pass is
+`/webdev:commit` step 5), the bullets aren't enough — apply the full hostile read from
+**`/webdev:commit` step 5** (5a rules 1–9, the 5b web-security checklist, 5c project bug-classes,
+and 5d). Most review back-and-forth is bugs introduced *by the fixes themselves*; this pass is
 worth it on every push.
 
 ## Step 9: Commit and push
@@ -170,10 +170,8 @@ now `isResolved:true`.
 Automated reviewers typically react to the new commit in ~2–3 min — often flagging issues the fixes
 themselves introduced. **Default: recheck once before declaring done.**
 1. Capture the push time: `git log -1 --format=%cI HEAD`
-2. Wait ~3 min via `ScheduleWakeup` (`delaySeconds: 180`, prompt re-entering this skill at
-   Step 12) when that tool exists in the environment. Where it doesn't (stock Claude Code
-   installs), one bounded `sleep 180` — or `gh pr checks <pr> --watch` when checks are also
-   pending — is the acceptable fallback; don't loop sleeps.
+2. Wait ~3 min with one bounded `sleep 180` — or `gh pr checks <pr> --watch` when checks are also
+   pending — then re-enter this skill at Step 12. Don't busy-poll.
 3. Re-fetch comments, filtered to those created *after* the push AND **not authored by you** (your
    Step 10 replies will trip the timestamp filter otherwise):
    ```bash

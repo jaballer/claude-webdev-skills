@@ -23,7 +23,7 @@ solved the problem you saw and shipped, then a sibling corner you never enumerat
 > **Why it pays for itself:** the cost of a 5-minute inventory is one paragraph the user can
 > correct. The cost of skipping it is a chain of follow-up commits, each patching one corner a
 > reviewer flags, three rounds deep. Surfacing the blast radius *before* you choose contracts is
-> the structural fix; a post-implementation self-review (see `/webdev:commit` step 4) catches
+> the structural fix; a post-implementation self-review (see `/webdev:commit` step 5) catches
 > some of it, but by then the contracts are already chosen — the miss is upstream.
 
 ## When to run
@@ -187,4 +187,4 @@ After the user approves or amends, then write code. **Do not invert this order.*
 ## What this does NOT replace
 - `/webdev:new-branch` — branching is independent; both run before code.
 - `/webdev:run-tests` — tests run after code; this runs before.
-- `/webdev:commit` step 4 — that's the *post*-implementation hostile read; this is the *pre*-implementation audit. Non-trivial work needs both.
+- `/webdev:commit` step 5 — that's the *post*-implementation hostile read; this is the *pre*-implementation audit. Non-trivial work needs both.

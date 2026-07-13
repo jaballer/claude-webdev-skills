@@ -74,7 +74,7 @@ changes, also **invoke `/webdev:verify`** — exercise the change in the running
 ## 3. Commit and PR
 
 **Invoke `/webdev:commit`** to run the pre-push self-review, stage, commit, push, and (by default)
-chain to `/webdev:open-pr`. The self-review's checklist 4c will fold in any project-specific bug
+chain to `/webdev:open-pr`. The self-review's checklist 5c will fold in any project-specific bug
 classes you've defined in `.claude/bug-classes.md`.
 
 ## Dependency graph
