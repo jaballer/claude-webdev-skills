@@ -143,7 +143,7 @@ the user's time.
 
 ## Step 6: Commit and push
 
-**Invoke `/webdev:commit`** — on a fork PR its push step (step 8) targets the contributor's fork
+**Invoke `/webdev:commit`** — on a fork PR its push step (step 9) targets the contributor's fork
 head, not upstream, matching the fork checkout from Step 1; if the fork isn't writable it stops
 rather than stranding the fix on the base repo. If a PR already exists, skip its open-pr step; on
 the branch-only path there is no PR — ask whether to open one now (usually yes, so the fix and its
