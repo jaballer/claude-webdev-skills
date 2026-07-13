@@ -92,7 +92,7 @@ The update applies on the next launch, not live — **restart Claude Code**, the
 | `coAuthorTrailer` | `commit`, `review-pr` | **Default `false`.** Opt in to an AI co-author commit trailer |
 | `prFooter` | `open-pr` | **Default `false`.** Opt in to a "Generated with Claude Code" PR footer |
 
-## Skills (v1.5.0)
+## Skills (v1.6.0)
 
 **Getting started**
 
@@ -123,6 +123,7 @@ The update applies on the next launch, not live — **restart Claude Code**, the
 | Skill | What it does |
 |---|---|
 | `/webdev:review-pr` | Addresses PR review comments (any bot or human) end to end: verify → sweep → fix → test → commit → reply → resolve threads → wait-and-recheck. Silence ≠ approval. |
+| `/webdev:watch-pr` | Polls a PR on an interval until it's approved / changes-requested / merged / closed, then notifies you or hands off to `merge-pr`. Configurable interval + on-approval action; silence ≠ approval. |
 | `/webdev:fix-ci` | Triage a red check: read the failing run's logs, classify (this branch / pre-existing / flake), reproduce locally, fix the cause, watch it go green. Never fixes the signal. |
 | `/webdev:merge-pr` | Merges the safe way: gate on approvals + green checks + resolved threads + up-to-date branch, pick the repo's merge method, merge, watch post-merge runs, chain to `sync-main`. |
 | `/webdev:post-merge-review` | Deep-dive review of a single merged PR — completeness, tests, security, docs, with a verdict. |
