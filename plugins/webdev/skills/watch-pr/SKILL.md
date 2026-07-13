@@ -50,15 +50,20 @@ gh pr view <number> --repo <owner>/<repo> \
 ```
 
 Also fetch the newest approval and the SHA it covers (an `APPROVED` `reviewDecision` can be an
-approval of an *older* diff when the repo doesn't dismiss stale reviews):
+approval of an *older* diff when the repo doesn't dismiss stale reviews). Query `reviews(states:
+APPROVED, …)` — the same way `merge-pr` does — not `latestReviews`: the latter returns only each
+user's *latest* review, so it hides an approval when the approver later submits an informational
+(non-approving) review, leaving the loop re-arming forever on an already-approved PR:
 
 ```bash
 gh api graphql -f query='
   query($owner:String!,$repo:String!,$pr:Int!){
     repository(owner:$owner,name:$repo){ pullRequest(number:$pr){
-      latestReviews(first:20){ nodes{ author{ login } state commit{ oid } } } } } }' \
+      reviews(states: APPROVED, last: 10){ nodes{ author{ login } state commit{ oid } submittedAt } } } } }' \
   -f owner=<owner> -f repo=<repo> -F pr=<number>
 ```
+
+The newest approval is the **last** node; compare its `commit.oid` to `headRefOid`.
 
 ## Step 3: Classify — terminal or keep waiting
 
@@ -109,9 +114,12 @@ change minute-to-minute. Don't pick exactly 5m.
 - **No branch protection?** `reviewDecision` can stay `null` forever on a repo that requires no
   review — such a PR is mergeable but will never self-report "approved". Say that plainly rather
   than looping indefinitely; the safety cap will end it, and the user decides.
-- **Longer or cross-session watches** — `ScheduleWakeup` is bounded to 60m and lives within this
-  session. For an hours-apart cadence or a watcher that must survive restarts, set up a cron
-  (`CronCreate`) that runs this same poll instead.
+- **Longer or cross-session watches** — `ScheduleWakeup` is bounded to 60m, and **both it and
+  `CronCreate` are session-scoped**: they're restored only on `--resume`/`--continue` while
+  unexpired, so neither survives a full restart or a fresh conversation. For a watcher that must
+  survive restarts, hand the same poll to a **durable** scheduler instead — Cloud Routines
+  (`/schedule`, runs on Anthropic infrastructure, min 1h cadence), a Desktop scheduled task, or an
+  external scheduler such as GitHub Actions. Don't rely on `CronCreate` for cross-session durability.
 - The user can stop the loop at any time; a single terminal result also ends it.
 
 ## What NOT to do
