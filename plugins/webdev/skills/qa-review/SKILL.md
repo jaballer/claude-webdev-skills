@@ -41,15 +41,20 @@ failures as findings — don't fix yet (Step 9).
 
 ## Step 5: Smoke test with static analysis
 Run the resolved checks that apply to the stack:
-- **Build / type-check** — resolve each command and run it only if one resolved. The script exits non-zero when a stack has no such command, so branch on that to record a **clean N/A skip** rather than a failed step: `if CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command build)"; then bash -c "$CMD"; else echo "build: N/A for this stack"; fi`, likewise for `typecheck`; confirm it compiles.
-- **Lint / format check** — same pattern: `if CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command lint)"; then bash -c "$CMD"; else echo "lint: N/A"; fi` (the script returns check-mode commands such as `eslint`, `biome check`, `pint --test`, `phpstan analyse`). A missing optional check is N/A, not a QA failure.
+- **Build / type-check** — resolve each command and **branch on the exit code**: `0` runs it, `3` is a clean N/A skip (stack has no such command), and `2`/`4` are config errors (invalid `webdev.json` / ambiguous package manager) that should abort rather than masquerade as a skip:
+  ```bash
+  CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command build)"; rc=$?
+  if [ "$rc" -eq 0 ]; then bash -c "$CMD"; elif [ "$rc" -eq 3 ]; then echo "build: N/A"; else echo "build: resolver error (exit $rc)"; fi
+  ```
+  Do the same for `typecheck`; confirm it compiles.
+- **Lint / format check** — same exit-code branching with `lint` (the script returns check-mode commands such as `eslint`, `biome check`, `pint --test`, `phpstan analyse`). Only exit `3` is a clean N/A; `2`/`4` are failures, not skips.
 - **Framework integrity** — route/view/config compile check if the framework offers one.
 
 **Comment-quality check**: flag added comments that narrate the next line rather than explain a
 non-obvious *why*, and empty/redundant docblocks. Surface in Style / Consistency Issues if present.
 
 ## Step 6: Database concerns
-Run the resolved migration-status command, recording a clean N/A skip when the stack has no migration tooling (rather than a failed DB check): `if CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command migrationStatus)"; then bash -c "$CMD"; else echo "migrations: N/A for this stack"; fi`. Are new migrations
+Run the resolved migration-status command with the same exit-code branching (`0` runs, `3` is a clean N/A skip for stacks without migrations, `2`/`4` are config errors that abort): `CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command migrationStatus)"; rc=$?; if [ "$rc" -eq 0 ]; then bash -c "$CMD"; elif [ "$rc" -eq 3 ]; then echo "migrations: N/A"; else echo "migrations: resolver error (exit $rc)"; fi`. Are new migrations
 reversible? Proper indexes on frequently-queried columns? Correct foreign-key constraints?
 
 ## Step 7: Documentation alignment

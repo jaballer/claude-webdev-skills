@@ -68,7 +68,19 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command format
 ```
 
 This prints the resolved command string for that key, with `commandPrefix` applied
-when appropriate.
+when appropriate. **Exit codes let a caller branch instead of guessing:**
+
+| Code | Meaning | Caller action |
+|------|---------|---------------|
+| `0` | Command resolved (printed to stdout) | run it |
+| `2` | `.claude/webdev.json` is invalid (bad JSON or not an object) | abort — fix config |
+| `3` | No such command for this stack (legitimately absent) | clean N/A skip for optional gates |
+| `4` | Ambiguous package manager (multiple JS lockfiles, not pinned) | abort — pin `packageManager` |
+
+Only exit `3` is a safe skip. `2`/`4` mean the setup is unsafe, so an optional
+gate (`format`/`lint`/`build`/`typecheck`/`migrationStatus`) must abort rather than
+silently treat it as N/A. A command pinned in `webdev.json` is returned verbatim even
+under a `4` ambiguity, since it doesn't depend on the detected manager.
 
 ## When detection is ambiguous
 

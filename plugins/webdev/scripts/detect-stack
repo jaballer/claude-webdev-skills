@@ -64,6 +64,29 @@ def install_for_pm(package_manager: str) -> str:
     return PM_INSTALL.get(package_manager, "")
 
 
+# JS lockfiles in detection-priority order, paired with their manager.
+JS_LOCKFILES = [
+    ("pnpm-lock.yaml", "pnpm"),
+    ("yarn.lock", "yarn"),
+    ("bun.lockb", "bun"),
+    ("bun.lock", "bun"),
+    ("package-lock.json", "npm"),
+]
+
+
+def js_lockfiles_present(root: Path) -> List[str]:
+    """Return the JS lockfile names present in root, in priority order."""
+    return [f for f, _ in JS_LOCKFILES if root.joinpath(f).exists()]
+
+
+def js_manager_from_lockfile(root: Path) -> str:
+    """Return the JS package manager implied by the first lockfile present, or ''."""
+    for f, pm in JS_LOCKFILES:
+        if root.joinpath(f).exists():
+            return pm
+    return ""
+
+
 def package_manager_and_install(root: Path, overrides: Dict[str, Any]) -> Tuple[str, str]:
     """Return (package_manager, install_command) detected from lockfiles.
 
@@ -251,6 +274,9 @@ def js_dev(pkg: Optional[Dict[str, Any]], package_manager: str, root: Path, fram
         return f"{package_manager_exec(package_manager, 'remix')} dev", "framework"
     if find_any(root, ["vite.config.*"]):
         return f"{package_manager_exec(package_manager, 'vite')}", "vite.config"
+    # Express, Create React App, and many plain-Node apps expose only `start`.
+    if "start" in scripts:
+        return package_manager_run(package_manager, "start"), "package.json"
     return "", ""
 
 
@@ -312,7 +338,7 @@ def php_format(root: Path, package_manager: str) -> Tuple[str, str]:
         return "composer format", "composer.json"
     if _has_pint(root):
         return "./vendor/bin/pint", "pint"
-    if find_any(root, [".php-cs-fixer*", ".php-cs-fixer.dist.*"]):
+    if find_any(root, [".php-cs-fixer.php", ".php-cs-fixer.dist.php"]):
         return "./vendor/bin/php-cs-fixer fix", ".php-cs-fixer"
     return "", ""
 
@@ -323,7 +349,7 @@ def php_lint(root: Path, package_manager: str, format_cmd: str) -> Tuple[str, st
         return "composer lint", "composer.json"
     if _has_pint(root):
         return "./vendor/bin/pint --test", "pint"
-    if find_any(root, [".php-cs-fixer*", ".php-cs-fixer.dist.*"]):
+    if find_any(root, [".php-cs-fixer.php", ".php-cs-fixer.dist.php"]):
         return "./vendor/bin/php-cs-fixer fix --dry-run", ".php-cs-fixer"
     if find(root, "phpstan.neon") or find(root, "phpstan.neon.dist"):
         return "./vendor/bin/phpstan analyse", "phpstan.neon"
@@ -341,12 +367,28 @@ def php_typecheck(root: Path, package_manager: str) -> Tuple[str, str]:
 
 
 def php_dev(root: Path, framework: str) -> Tuple[str, str]:
+    # Modern Laravel apps run the whole stack (server + Vite + queue + logs) via a
+    # composer `dev` script; prefer it over the bare artisan server.
+    composer = load_json(root / "composer.json") or {}
+    if "dev" in composer.get("scripts", {}):
+        return "composer dev", "composer.json"
     if framework == "laravel":
         return "php artisan serve", "framework"
     return "", ""
 
 
 def php_build(root: Path, framework: str) -> Tuple[str, str]:
+    # A composer `build` script wins; otherwise a Laravel/Symfony app usually
+    # builds frontend assets from package.json (Vite), so resolve that through the
+    # frontend lockfile's manager rather than reporting no build command.
+    composer = load_json(root / "composer.json") or {}
+    if "build" in composer.get("scripts", {}):
+        return "composer build", "composer.json"
+    pkg = load_json(root / "package.json") or {}
+    if "build" in pkg.get("scripts", {}):
+        js_pm = js_manager_from_lockfile(root)
+        if js_pm:
+            return package_manager_run(js_pm, "build"), "package.json"
     return "", ""
 
 
@@ -524,10 +566,7 @@ def detect(root: Path, overrides: Dict[str, Any]) -> Dict[str, Any]:
         resolved.get("packageManager") in ("pnpm", "yarn", "bun", "npm")
         and sources.get("packageManager") != "webdev.json"
     ):
-        js_locks = [
-            f for f in ("pnpm-lock.yaml", "yarn.lock", "bun.lockb", "bun.lock", "package-lock.json")
-            if root.joinpath(f).exists()
-        ]
+        js_locks = js_lockfiles_present(root)
         if len(js_locks) > 1:
             pm_ambiguous = True
             gaps.append(
@@ -573,6 +612,15 @@ def main() -> None:
                 file=sys.stderr,
             )
             sys.exit(2)
+        if not isinstance(loaded, dict):
+            # A valid but non-object payload (array/scalar) would crash detect()
+            # on string-key indexing, or silently act as no overrides.
+            print(
+                f"detect-stack: {webdev_path} must be a JSON object of "
+                "key/command overrides — fix the file or remove it.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
         overrides = loaded
 
     profile = detect(root, overrides)
@@ -590,16 +638,20 @@ def main() -> None:
         command_keys = {
             "install", "test", "format", "lint", "typecheck", "dev", "build", "migrationStatus",
         }
+        pinned = profile.get("sources", {}).get(key) == "webdev.json"
+        # Exit codes let callers distinguish a clean "no command for this stack"
+        # (3 → optional gate skips) from an unsafe/error state (4 → gate aborts).
         # An ambiguous package manager would resolve every command through a
         # first-match guess; refuse to hand callers a possibly-wrong command
-        # (they run these directly and never see the gaps array).
-        if key in command_keys and profile.get("packageManagerAmbiguous"):
+        # (they run these directly and never see the gaps array). A command pinned
+        # verbatim in webdev.json is complete on its own and safe to return.
+        if key in command_keys and profile.get("packageManagerAmbiguous") and not pinned:
             print(
                 "detect-stack: ambiguous package manager (multiple JS lockfiles) — "
                 f"cannot safely resolve {key!r}; pin packageManager in .claude/webdev.json.",
                 file=sys.stderr,
             )
-            sys.exit(3)
+            sys.exit(4)
         if key in command_keys and (value is None or value == ""):
             print(
                 f"detect-stack: no {key!r} command resolved for this stack — "
