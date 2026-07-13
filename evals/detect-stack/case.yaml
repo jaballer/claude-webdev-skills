@@ -1,0 +1,53 @@
+schema_version: "1.0"
+name: detect-stack-pnpm-vite
+description: >
+  Verify that /webdev:detect-stack correctly resolves a Vite + pnpm + TypeScript + Vitest
+  sample repo using the bundled detect-stack script.
+tags:
+  - detect-stack
+  - pnpm
+  - vite
+  - vitest
+context:
+  scaffold_script: scaffold.sh
+execution:
+  prompt: "Run /webdev:detect-stack and report the resolved package manager, test command, dev command, and format command."
+  max_turns: 10
+  timeout_seconds: 120
+  allowed_tools:
+    - Bash
+    - Read
+    - Glob
+  model: haiku
+runs: 3
+graders:
+  - type: regex
+    name: package-manager
+    target: last_message
+    pattern: "packageManager.*pnpm|pnpm"
+    match: contains
+    weight: 1
+  - type: regex
+    name: test-command
+    target: last_message
+    pattern: "vitest|pnpm test|pnpm run test"
+    match: contains
+    weight: 1
+  - type: regex
+    name: dev-command
+    target: last_message
+    pattern: "vite|pnpm dev|pnpm run dev"
+    match: contains
+    weight: 1
+  - type: regex
+    name: format-command
+    target: last_message
+    pattern: "prettier|biome|pint|php-cs-fixer"
+    match: contains
+    weight: 1
+  - type: tool_used
+    name: uses-detect-stack-script
+    tool: Bash
+    input_match: "scripts/detect-stack"
+    min: 1
+    weight: 1

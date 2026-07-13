@@ -14,7 +14,7 @@ description: >
 
 Green tests prove the assertions that exist. This skill proves the change in the medium the
 user will experience it: the rendered page, the actual HTTP response, the real form submit.
-Resolve the dev command via `/webdev:detect-stack`.
+Resolve the dev command via `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command dev` and the build command via `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command build` when needed.
 
 ## Hard rule: report observations, not intentions
 
