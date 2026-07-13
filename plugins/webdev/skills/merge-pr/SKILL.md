@@ -31,7 +31,7 @@ bare number.
 ## Step 2: The pre-merge gate — verify, don't assume
 
 ```bash
-gh pr view <number> --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName,headRefName,title,headRefOid
+gh pr view <number> --repo <owner>/<repo> --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,baseRefName,headRefName,title,headRefOid
 ```
 
 **Record `headRefOid`** — that SHA is what these gates certify, and Step 4 pins the merge to it.
@@ -41,10 +41,10 @@ Walk every gate; each has a defined stop:
 | Gate | Pass | On failure |
 |---|---|---|
 | State | `OPEN`, not a draft | Draft → stop; ask if it should be marked ready first |
-| Checks (`statusCheckRollup`) | all green | Failing → stop, **invoke `/webdev:fix-ci`**. Pending → wait (`gh pr checks --watch` or a `ScheduleWakeup` recheck), don't merge ahead of CI |
+| Checks (`statusCheckRollup`) | all green | Failing → stop, **invoke `/webdev:fix-ci`**. Pending → wait (`gh pr checks --watch --repo <owner>/<repo>` or `sleep 180` then re-check), don't merge ahead of CI |
 | Review (`reviewDecision`) | `APPROVED` **and the approval covers the current head** — `reviewDecision` alone can be an approval of an older diff when the repo doesn't dismiss stale reviews. Verify: `gh api graphql` for `reviews(states: APPROVED, last: 10) { nodes { commit { oid } submittedAt } }` and confirm the newest approval's `commit.oid` equals `headRefOid`. Later commits — **even ones authored by the approver** — mean the head itself was never reviewed (pushing isn't reviewing), so treat that as approval-predating-head, not a pass. Or the repo requires no review | `CHANGES_REQUESTED` → stop, **invoke `/webdev:review-pr`**. `REVIEW_REQUIRED` → stop; a required review can't be merged around. **Approval predates the head** → report "approved, but not on the latest commits" — the user decides (re-request review, or explicitly proceed) |
 | Threads | no unresolved review threads (the reviewThreads GraphQL query in `/webdev:review-pr` step 11 — **paginate**: `reviewThreads(first:100)` caps at 100 per request, so on big PRs follow `pageInfo { hasNextPage endCursor }` until exhausted; an unresolved thread on page 2 is still a gate) | List the open threads; offer `/webdev:review-pr` |
-| Up to date (`mergeStateStatus`) | `CLEAN`, or `HAS_HOOKS` (GitHub Enterprise pre-receive hooks — mergeable with passing status; treat as pass). `UNKNOWN` → GitHub computes this async: re-query after a few seconds rather than failing the gate | `BEHIND` → update the branch (`gh pr update-branch`, or rebase if that's the repo's convention) — **this creates a new head: re-run the ENTIRE gate table against it**, not just checks. The update can invalidate approvals (stale-review dismissal) and changes `headRefOid`, so re-fetch reviewDecision, threads, and the new SHA before merging. `DIRTY` → conflicts; resolve on the branch locally (merge base in, resolve, test, push), never through the web editor blindly |
+| Up to date (`mergeStateStatus`) | `CLEAN`, or `HAS_HOOKS` (GitHub Enterprise pre-receive hooks — mergeable with passing status; treat as pass). `UNKNOWN` → GitHub computes this async: re-query after a few seconds rather than failing the gate | `BEHIND` → update the branch (`gh pr update-branch --repo <owner>/<repo>`, or rebase if that's the repo's convention) — **this creates a new head: re-run the ENTIRE gate table against it**, not just checks. The update can invalidate approvals (stale-review dismissal) and changes `headRefOid`, so re-fetch reviewDecision, threads, and the new SHA before merging. `DIRTY` → conflicts; resolve on the branch locally (merge base in, resolve, test, push), never through the web editor blindly |
 
 **Merge-queue bases:** if the PR's base requires a merge queue (Step 4), `BEHIND` is **not** a
 failure to fix here — the queue brings each PR up to date as it lands, and running
@@ -62,7 +62,7 @@ what's being overridden.
 ## Step 3: Pick the merge method
 
 Always fetch what the repo allows first:
-`gh repo view --json squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed`. **Also check the
+`gh repo view <owner>/<repo> --json squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed`. **Also check the
 base branch's protection** — a base with *Require linear history* rejects merge commits even when
 `mergeCommitAllowed` is true repo-wide (`gh api repos/<owner>/<repo>/branches/<base>/protection`
 → `required_linear_history.enabled`, or the equivalent ruleset). Rule out `merge` there now, rather
@@ -85,7 +85,7 @@ re-ask.** If this skill was reached any other way (chained, inferred, "what's ne
 `title · #number · method · base` and get a yes first.
 
 ```bash
-gh pr merge <number> --squash --delete-branch --match-head-commit <headRefOid>   # or --merge / --rebase
+gh pr merge <number> --repo <owner>/<repo> --squash --delete-branch --match-head-commit <headRefOid>   # or --merge / --rebase
 ```
 
 **`--match-head-commit` pins the merge to the SHA the gates certified** (from Step 2, re-fetched
@@ -95,7 +95,7 @@ new head.
 
 **Merge-queue repos:** when the base branch requires a merge queue, the queue owns the merge
 method — don't pass `--squash`/`--merge`/`--rebase`. **Still pin the head:**
-`gh pr merge <number> --match-head-commit <headRefOid>` adds the PR to the queue (omitting only
+`gh pr merge <number> --repo <owner>/<repo> --match-head-commit <headRefOid>` adds the PR to the queue (omitting only
 the strategy flag), so a push landing after Step 2 is refused rather than enqueued unverified.
 Expect `state` to stay `OPEN` while queued: verify by watching for `MERGED` (or a queue rejection)
 rather than assuming, and report "queued" honestly if it hasn't landed yet.
@@ -103,7 +103,7 @@ rather than assuming, and report "queued" honestly if it hasn't landed yet.
 **Before `--delete-branch`, check for stacked PRs that depend on this head.** Another open PR
 using this PR's head branch as its base gets **closed, not retargeted**, when the branch is deleted:
 ```bash
-gh pr list --state open --base <headRefName> --json number,headRefName   # headRefName from Step 2
+gh pr list --state open --repo <owner>/<repo> --base <headRefName> --json number,headRefName   # headRefName from Step 2
 ```
 If any exist, omit `--delete-branch` (retarget them to the new base first, or leave the branch for
 the stack). Otherwise `--delete-branch` removes the remote branch and switches the local checkout
@@ -113,14 +113,14 @@ itself is done — `/webdev:sync-main` in Step 6 cleans up the rest; don't retry
 ## Step 5: Verify the outcome
 
 ```bash
-gh pr view <number> --json state,mergedAt,mergeCommit
+gh pr view <number> --repo <owner>/<repo> --json state,mergedAt,mergeCommit
 ```
 Confirm `MERGED` + capture the merge/squash SHA. Note any issues auto-closed by `Closes #N`.
 Then check whether **this merge** kicked off base-branch workflows (deploys) — filter to the
 merge commit, not just the branch, or an older red run on a busy base gets misattributed to
 this merge:
 ```bash
-gh run list --branch <base> --commit <merge-sha> --limit 5
+gh run list --repo <owner>/<repo> --branch <base> --commit <merge-sha> --limit 5
 ```
 If a deploy/CI run started, report it (and its status if quickly available) — **a red run
 triggered by this merge goes to `/webdev:fix-ci`**, on a fresh branch. Don't declare the loop

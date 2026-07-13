@@ -143,7 +143,7 @@ the user's time.
 
 ## Step 6: Commit and push
 
-**Invoke `/webdev:commit`** — on a fork PR its push step (step 8) targets the contributor's fork
+**Invoke `/webdev:commit`** — on a fork PR its push step (step 9) targets the contributor's fork
 head, not upstream, matching the fork checkout from Step 1; if the fork isn't writable it stops
 rather than stranding the fix on the base repo. If a PR already exists, skip its open-pr step; on
 the branch-only path there is no PR — ask whether to open one now (usually yes, so the fix and its
@@ -156,7 +156,7 @@ Re-check the **same workflow/job from Step 1**, not just any run on the commit.
 
 **With a PR:** `gh pr checks <number> --watch`. Right after a push GitHub can briefly report **no
 checks** for the new head SHA before they register — treat a "no checks reported" error as
-transient: wait ~20–30s (or `ScheduleWakeup`) and retry a couple of times before concluding the
+transient: wait ~20–30s (`sleep 30`) and retry a couple of times before concluding the
 checks are genuinely absent.
 
 **Branch-only (no PR number):** several workflows can run on one commit, so select the Step 1
@@ -169,7 +169,7 @@ gh run watch <run-id> --exit-status
 ```
 `--exit-status` matters: without it `gh run watch` exits 0 even when the run fails, and "the
 command succeeded" gets misread as green. If in doubt, confirm explicitly:
-`gh run view <run-id> --json conclusion`. Waiting ~3 min via `ScheduleWakeup` and re-checking also
+`gh run view <run-id> --json conclusion`. Waiting ~3 min with `sleep 180` and re-checking also
 works — don't busy-poll.
 
 - **Green** → done.
