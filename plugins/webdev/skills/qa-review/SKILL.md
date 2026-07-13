@@ -11,7 +11,7 @@ description: >
 # QA Review
 
 Comprehensive audit of recently merged functionality to catch bugs, gaps, inconsistencies, and
-improvement opportunities. Resolve project commands via `/webdev:detect-stack`.
+improvement opportunities. Resolve project commands via `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command <test|lint|typecheck|build|migration>`.
 
 ## Step 1: Get onto the up-to-date base (no branch yet)
 The audit itself (Steps 2–8) is **read-only** — don't create a branch for it. But it must read
@@ -35,21 +35,21 @@ migrations, seeds, tests, config?), **consistency** (do new files follow existin
 data, missing relations, logged-out, disabled users).
 
 ## Step 4: Run the test suite
-**Invoke `/webdev:run-tests`** at full scope. Determine: do all existing tests still pass? does new
+**Invoke `/webdev:run-tests`** at full scope, which uses `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command test` to get the command. Determine: do all existing tests still pass? does new
 functionality have adequate coverage (happy path, validation/failure, authorization)? Document
 failures as findings — don't fix yet (Step 9).
 
 ## Step 5: Smoke test with static analysis
 Run the resolved checks that apply to the stack:
-- **Build / type-check** — resolved build and type-check commands (per `/webdev:detect-stack`); confirm it compiles.
-- **Lint / format check** — resolved lint in check mode (`eslint`, `biome check`, `pint --test`, `ruff check`).
+- **Build / type-check** — `bash -c "$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command build)"` and `bash -c "$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command typecheck)"` (if non-empty); confirm it compiles.
+- **Lint / format check** — `bash -c "$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command lint)"` (the script returns check-mode commands such as `eslint`, `biome check`, `pint --test`, `ruff check`).
 - **Framework integrity** — route/view/config compile check if the framework offers one.
 
 **Comment-quality check**: flag added comments that narrate the next line rather than explain a
 non-obvious *why*, and empty/redundant docblocks. Surface in Style / Consistency Issues if present.
 
 ## Step 6: Database concerns
-Run the resolved migration-status command from `/webdev:detect-stack` (skip if N/A for the stack). Are new migrations
+Run the resolved migration-status command from `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command migration` (skip if N/A for the stack). Are new migrations
 reversible? Proper indexes on frequently-queried columns? Correct foreign-key constraints?
 
 ## Step 7: Documentation alignment

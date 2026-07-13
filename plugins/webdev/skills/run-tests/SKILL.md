@@ -10,10 +10,7 @@ description: >
 
 # Run Tests
 
-Stack-agnostic. **Resolve the test command through `/webdev:detect-stack`** (which honors
-`.claude/webdev.json` first, then detection) — never assume `npm test` or `phpunit`. Apply
-the project's `commandPrefix` to a **detected** command (e.g. `ddev exec`); a command pinned
-in `webdev.json` is already complete — use it verbatim.
+Stack-agnostic. **Resolve the test command through `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command test`**, which honors `.claude/webdev.json` first, then detection — never assume `npm test` or `phpunit`. The script applies `commandPrefix` to detected commands; a command pinned in `webdev.json` is already complete. Execute the resolved command with `bash -c "$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command test)"` and append the runner-specific filter for targeted runs.
 
 ## Decision Logic — default to the smallest run that proves the change
 

@@ -11,7 +11,7 @@ description: >
 # Commit
 
 Work through these steps in order. Skipping steps (especially tests and the self-review)
-risks shipping broken code. Resolve all project commands via `/webdev:detect-stack`.
+risks shipping broken code. Resolve project commands via the plugin scripts: run `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command format` for the formatter and `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command lint` for the linter.
 
 ## 1. Confirm you're on a working branch
 
@@ -31,9 +31,7 @@ PR. Whatever scope you run must pass before committing — fix failures before s
 
 ## 3. Run the formatter / linter
 
-Run the resolved format command (e.g. `prettier --write`, `biome format --write`, `pint`,
-`ruff format`). If it modifies files, stage those too. If a linter is configured, run it and fix
-violations now.
+Run the resolved format command (`bash -c "$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command format)"`) to write files. If it modifies files, stage those too. If a linter is configured, run it with `bash -c "$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command lint)"` and fix violations now.
 
 > **Agent Delegation:** steps 2 and 3 are independent — run them as parallel sub-agents (tests
 > at scope · formatter). If either fails, stop and fix before step 5. If the formatter changed
