@@ -67,7 +67,12 @@ Use the resolved test command, then narrow it with the runner's native filter:
 | phpunit | `<test>` | `<test> tests/Feature/FooTest.php` | `<test> --filter test_name` |
 | pest | `<test>` | `<test> tests/Feature/FooTest.php` | `<test> --filter "name"` |
 
-`<test>` is the resolved command (incl. `commandPrefix`). If tests behave unexpectedly,
+`<test>` is the resolved command (incl. `commandPrefix`). **When `<test>` is an npm script**
+(e.g. `npm run test`), npm eats leading flags as its own — insert `--` before the runner's
+args: `npm run test -- path/to/file.test.ts` and `npm run test -- -t "name"`. pnpm/yarn/bun pass
+args through without the separator.
+
+If tests behave unexpectedly,
 clear caches/build artifacts first (framework-appropriate: `config:clear`, deleting
 `.vitest`/`node_modules/.cache`, etc.), then re-run.
 

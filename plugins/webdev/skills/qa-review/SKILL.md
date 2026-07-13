@@ -41,8 +41,8 @@ failures as findings — don't fix yet (Step 9).
 
 ## Step 5: Smoke test with static analysis
 Run the resolved checks that apply to the stack:
-- **Build / type-check** — resolve each command, run it only if one resolved (the script exits non-zero when a stack has no such command, so `&&` skips it cleanly): `CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command build)" && bash -c "$CMD"`, likewise for `typecheck`; confirm it compiles.
-- **Lint / format check** — `CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command lint)" && bash -c "$CMD"` (the script returns check-mode commands such as `eslint`, `biome check`, `pint --test`, `phpstan analyse`).
+- **Build / type-check** — resolve each command and run it only if one resolved. The script exits non-zero when a stack has no such command, so branch on that to record a **clean N/A skip** rather than a failed step: `if CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command build)"; then bash -c "$CMD"; else echo "build: N/A for this stack"; fi`, likewise for `typecheck`; confirm it compiles.
+- **Lint / format check** — same pattern: `if CMD="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command lint)"; then bash -c "$CMD"; else echo "lint: N/A"; fi` (the script returns check-mode commands such as `eslint`, `biome check`, `pint --test`, `phpstan analyse`). A missing optional check is N/A, not a QA failure.
 - **Framework integrity** — route/view/config compile check if the framework offers one.
 
 **Comment-quality check**: flag added comments that narrate the next line rather than explain a

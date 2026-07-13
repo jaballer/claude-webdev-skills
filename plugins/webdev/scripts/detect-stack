@@ -183,7 +183,7 @@ def js_format(pkg: Optional[Dict[str, Any]], package_manager: str, root: Path) -
     scripts = (pkg or {}).get("scripts", {})
     if "format" in scripts:
         return package_manager_run(package_manager, "format"), "package.json"
-    if find(root, "biome.json"):
+    if find(root, "biome.json", "biome.jsonc"):
         return f"{package_manager_exec(package_manager, 'biome')} format --write", "biome.json"
     if find(root, "prettier.config.js") or find_any(root, [".prettierrc*", "prettier.config.*"]):
         return f"{package_manager_exec(package_manager, 'prettier')} --write .", ".prettierrc"
@@ -198,7 +198,7 @@ def js_lint(pkg: Optional[Dict[str, Any]], package_manager: str, root: Path, for
     scripts = (pkg or {}).get("scripts", {})
     if "lint" in scripts:
         return package_manager_run(package_manager, "lint"), "package.json"
-    if find(root, "biome.json"):
+    if find(root, "biome.json", "biome.jsonc"):
         return f"{package_manager_exec(package_manager, 'biome')} check", "biome.json"
     eslint = find_any(root, [".eslintrc*", "eslint.config.*"])
     if eslint:
@@ -206,7 +206,7 @@ def js_lint(pkg: Optional[Dict[str, Any]], package_manager: str, root: Path, for
     if "eslint" in _js_deps(pkg):
         return f"{package_manager_exec(package_manager, 'eslint')} .", "package.json"
     prettier = find_any(root, [".prettierrc*", "prettier.config.*"])
-    if prettier and not find(root, "biome.json"):
+    if prettier and not find(root, "biome.json", "biome.jsonc"):
         return f"{package_manager_exec(package_manager, 'prettier')} --check .", str(prettier.name)
     if "prettier" in _js_deps(pkg):
         return f"{package_manager_exec(package_manager, 'prettier')} --check .", "package.json"
@@ -218,6 +218,12 @@ def js_typecheck(pkg: Optional[Dict[str, Any]], package_manager: str, root: Path
     for key in ["typecheck", "type-check"]:
         if key in scripts:
             return package_manager_run(package_manager, key), "package.json"
+    # Svelte/SvelteKit type-check .svelte SFCs with svelte-check; the scaffold
+    # exposes it as the `check` script, and it applies with or without tsconfig.
+    if framework in ("svelte", "@sveltejs/kit"):
+        if "check" in scripts:
+            return package_manager_run(package_manager, "check"), "package.json"
+        return f"{package_manager_exec(package_manager, 'svelte-check')}", "svelte-check"
     if not find(root, "tsconfig.json"):
         return "", ""
     if framework == "vue":
@@ -283,6 +289,11 @@ def _has_pint(root: Path) -> bool:
 
 
 def php_test(root: Path, package_manager: str) -> Tuple[str, str]:
+    # Prefer a composer.json script (mirrors the JS package.json path): projects
+    # often wrap PHPUnit/Pest with env flags there, or run without a phpunit.xml.
+    composer = load_json(root / "composer.json") or {}
+    if "test" in composer.get("scripts", {}):
+        return "composer test", "composer.json"
     if _has_pest(root):
         return "./vendor/bin/pest", "pest"
     if find(root, "phpunit.xml") or find(root, "phpunit.xml.dist"):
@@ -488,8 +499,28 @@ def detect(root: Path, overrides: Dict[str, Any]) -> Dict[str, Any]:
     # pinned command (test, packageManager, …) clears a gap that filesystem
     # detection alone could not.
     gaps: List[str] = []
-    if resolved.get("packageManager") in ("unknown", "", None):
+    # A custom/unsupported stack that pins its runnable commands in webdev.json is
+    # a supported path (per the "any other stack" docs) — don't flag a missing
+    # package manager when the user has deliberately pinned commands.
+    pinned_commands = [k for k in command_keys if sources.get(k) == "webdev.json" and resolved.get(k)]
+    if resolved.get("packageManager") in ("unknown", "", None) and not pinned_commands:
         gaps.append("No supported lockfile or package manager found.")
+    # Multiple JS lockfiles (e.g. a mid-migration repo) make the manager ambiguous;
+    # only when a JS manager was auto-selected and not pinned. Composer wins earlier,
+    # so PHP backends with a frontend lockfile don't trip this.
+    if (
+        resolved.get("packageManager") in ("pnpm", "yarn", "bun", "npm")
+        and sources.get("packageManager") != "webdev.json"
+    ):
+        js_locks = [
+            f for f in ("pnpm-lock.yaml", "yarn.lock", "bun.lockb", "bun.lock", "package-lock.json")
+            if root.joinpath(f).exists()
+        ]
+        if len(js_locks) > 1:
+            gaps.append(
+                "Multiple JS lockfiles present (" + ", ".join(js_locks) + ") — ambiguous "
+                "package manager; pin packageManager in .claude/webdev.json."
+            )
     if not resolved.get("test"):
         if resolved.get("workspace"):
             gaps.append(

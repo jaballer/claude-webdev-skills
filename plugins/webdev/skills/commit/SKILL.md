@@ -31,7 +31,17 @@ PR. Whatever scope you run must pass before committing — fix failures before s
 
 ## 3. Run the formatter / linter
 
-Run the resolved format command (`bash -c "$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command format)"`) to write files. If it modifies files, stage those too. If a linter is configured, run it with `bash -c "$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command lint)"` and fix violations now.
+Run the resolved format command to write files. Capture it **first** so an unresolved key
+fails the gate instead of running nothing — `bash -c "$(false)"` exits 0, silently turning a
+required gate into a no-op:
+
+```bash
+FMT="$(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-command format)" && bash -c "$FMT"
+```
+
+If it modifies files, stage those too. If a linter is configured, run it the same way
+(`LINT="$(… resolve-command lint)" && bash -c "$LINT"`) and fix violations now. A stack with no
+formatter/linter resolves to non-zero and is a clean skip, not a failure.
 
 > **Agent Delegation:** steps 2 and 3 are independent — run them as parallel sub-agents (tests
 > at scope · formatter). If either fails, stop and fix before step 5. If the formatter changed
