@@ -62,7 +62,7 @@ what's being overridden.
 ## Step 3: Pick the merge method
 
 Always fetch what the repo allows first:
-`gh repo view --repo <owner>/<repo> --json squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed`. **Also check the
+`gh repo view <owner>/<repo> --json squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed`. **Also check the
 base branch's protection** — a base with *Require linear history* rejects merge commits even when
 `mergeCommitAllowed` is true repo-wide (`gh api repos/<owner>/<repo>/branches/<base>/protection`
 → `required_linear_history.enabled`, or the equivalent ruleset). Rule out `merge` there now, rather
