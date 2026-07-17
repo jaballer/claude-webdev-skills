@@ -143,6 +143,33 @@ The update applies on the next launch, not live — **restart Claude Code**, the
 /webdev:ship-it          # make your first change, guided end to end
 ```
 
+## Which model for which task
+
+These skills run on whatever model your session is set to (`/model`) — a skill can't pick its
+own. So the practical move is to **match your session model to the phase of work you're about to
+do**, and switch when you change phases. The axis isn't "planning model vs. coding model" —
+current Claude models are generalists separated by a **capability / speed / cost** tradeoff. The
+question to ask is just: *is this the kind of task where a weaker model quietly gets it wrong?*
+
+| Model tier | Reach for it when | Phases / skills | Why |
+|---|---|---|---|
+| **Top** (Fable 5 / Mythos) | The task is judgment-heavy, adversarial, or hard to reverse | Root-causing a stubborn bug (`fix-bug`), pre-code planning (`plan-inventory`), reversibility / blast-radius calls (`safe-edit`), hostile self-review + security gate (`commit`, `review-pr`), deep audits (`qa-review`, `post-merge-review`), merge gating (`merge-pr`) | Deepest reasoning. The cost/latency premium earns out only where a subtle wrong call is expensive — a bad root cause, a missed blast radius, a security issue slipping through. |
+| **Strong default** (Opus 4.8) | You're actually writing and orchestrating code | The bulk of `new-feature` / `ship-it`, real implementation, `fix-ci` | Excellent coding and orchestration without top-tier latency. Toggle `/fast` for faster output at the same capability. A sane everyday default. |
+| **Balanced** (Sonnet 5) | Routine implementation and running the loop | `new-branch`, `sync-main`, `open-pr`, `verify`, `explain-codebase`, `setup`, `watch-pr` | Cheaper and quicker for well-defined steps that don't need frontier reasoning. |
+| **Fast / cheap** (Haiku 4.5) | The step is mechanical and deterministic | `detect-stack`, `run-tests` | `detect-stack` is literally a Python script; running a resolved test command needs almost no model judgment. Paying for the top tier here is pure waste. |
+
+**Rules of thumb**
+
+- **Don't run the top tier on everything.** Running Fable 5 through `detect-stack` or a green
+  `run-tests` buys nothing but latency and cost — that anti-pattern is what this table exists to
+  prevent.
+- **Switch by phase, not by skill.** Bump *up* before planning or review; drop *down* for
+  mechanical runs. One `/model` change per phase, not per command.
+- **`/fast` is the free lunch on Opus** — faster output, same model, no capability drop.
+
+> Model lineup current as of July 2026 (the Claude 5 family plus Opus 4.8 / Haiku 4.5). Treat the
+> tiers as stable and swap the names as the lineup changes.
+
 ## Roadmap
 
 The core is complete. Planned next skills, roughly in order: `update-deps` (dependency
