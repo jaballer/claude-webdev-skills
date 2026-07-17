@@ -47,13 +47,17 @@ Editing this repo — or merging PRs into it — does **not** update your instal
 plugin is served from the `jaballer/claude-webdev-skills` GitHub marketplace, so changes have
 to reach `main` there first, then get pulled in. From a terminal:
 
-```bash
-# 1. Refresh the marketplace from GitHub
-claude plugin marketplace update webdev-skills
+1. Refresh the marketplace from GitHub
+
+   ```
+   claude plugin marketplace update webdev-skills
+   ```
 
 # 2. Update the plugin to the latest version
-claude plugin update webdev@webdev-skills
-```
+
+   ```
+   claude plugin update webdev@webdev-skills
+   ```
 
 The update applies on the next launch, not live — **restart Claude Code**, then confirm with
 `claude plugin list`. You can also manage updates interactively from the `/plugin` menu.
