@@ -53,7 +53,7 @@ to reach `main` there first, then get pulled in. From a terminal:
    claude plugin marketplace update webdev-skills
    ```
 
-# 2. Update the plugin to the latest version
+2. Update the plugin to the latest version
 
    ```
    claude plugin update webdev@webdev-skills
