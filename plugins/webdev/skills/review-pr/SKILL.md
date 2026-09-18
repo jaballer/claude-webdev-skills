@@ -178,7 +178,9 @@ themselves introduced. **Default: recheck once before declaring done.**
    ME=$(gh api user --jq .login)
    # TZ=UTC + --date=iso-strict-local asks git to do the UTC conversion itself, so this
    # works identically on BSD/macOS and GNU without shelling out to `date -d`/`date -j`.
-   PUSH_TS=$(TZ=UTC git log -1 --date=iso-strict-local --format=%cd HEAD)
+   # Some git versions render zero offset as "+00:00" instead of "Z"; jq's fromdateiso8601
+   # only accepts the "Z" suffix, so normalize it explicitly rather than depend on git's choice.
+   PUSH_TS=$(TZ=UTC git log -1 --date=iso-strict-local --format=%cd HEAD | sed 's/+00:00$/Z/')
    gh api --paginate repos/<owner>/<repo>/pulls/<pr_number>/comments \
      | jq --arg me "$ME" --arg ts "$PUSH_TS" '[.[]|select((.created_at|fromdateiso8601) > ($ts|fromdateiso8601) and .user.login != $me)]|length'
    ```
