@@ -176,8 +176,11 @@ themselves introduced. **Default: recheck once before declaring done.**
    Step 10 replies will trip the timestamp filter otherwise):
    ```bash
    ME=$(gh api user --jq .login)
-   # BSD/macOS date shown; on GNU date use: PUSH_TS=$(date -u -d "$(git log -1 --format=%cI HEAD)" +"%Y-%m-%dT%H:%M:%SZ")
-   PUSH_TS=$(date -u -j -f "%Y-%m-%dT%H:%M:%S%z" "$(git log -1 --format=%cI HEAD | sed 's/:\(..\)$/\1/')" +"%Y-%m-%dT%H:%M:%SZ")
+   # TZ=UTC + --date=iso-strict-local asks git to do the UTC conversion itself, so this
+   # works identically on BSD/macOS and GNU without shelling out to `date -d`/`date -j`.
+   # Some git versions render zero offset as "+00:00" instead of "Z"; jq's fromdateiso8601
+   # only accepts the "Z" suffix, so normalize it explicitly rather than depend on git's choice.
+   PUSH_TS=$(TZ=UTC git log -1 --date=iso-strict-local --format=%cd HEAD | sed 's/+00:00$/Z/')
    gh api --paginate repos/<owner>/<repo>/pulls/<pr_number>/comments \
      | jq --arg me "$ME" --arg ts "$PUSH_TS" '[.[]|select((.created_at|fromdateiso8601) > ($ts|fromdateiso8601) and .user.login != $me)]|length'
    ```

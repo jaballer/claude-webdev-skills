@@ -67,7 +67,7 @@ For any route, export, public symbol, URL, or component being deleted / renamed 
 semantics changed, grep every reference (old name AND any aliases):
 ```bash
 grep -rn "oldRouteName\|OldComponent\|/old/url-path" src app routes resources tests \
-  --include="*.ts" --include="*.tsx" --include="*.js" --include="*.vue" --include="*.php" --include="*.blade.php"
+  --include="*.ts" --include="*.tsx" --include="*.js" --include="*.vue" --include="*.php" --include="*.blade.php" --include="*.py"
 ```
 | Reference | File:line | Intent / audience | Decision |
 |---|---|---|---|
