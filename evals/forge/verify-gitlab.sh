@@ -120,7 +120,12 @@ for k in ["default_branch","merge_method","squash_option","only_allow_merge_if_p
 run "protected branches (raw API)" glab api "projects/:id/protected_branches"; keys
 
 run "ci status (JSON, current branch)" glab ci status -F json; keys
-run "ci status --wait accepted?" glab ci status --help
+# `--help` exits 0 on every version, so grep for the flag instead of counting the exit code
+echo; echo "### ci status --wait / --pipeline-id in help"
+CIHELP="$(glab ci status --help 2>&1)"
+for f in --wait --live --pipeline-id; do
+  if printf '%s' "$CIHELP" | grep -q -- "$f"; then echo "  ci status $f: PRESENT"; else echo "  ci status $f: absent"; fi
+done
 run "ci list" glab ci list --per-page 3
 [ -n "$JOB" ] && run "ci trace <job>" glab ci trace "$JOB"
 

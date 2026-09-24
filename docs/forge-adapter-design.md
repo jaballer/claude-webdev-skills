@@ -30,10 +30,13 @@ commands and data shapes are not.
 
 1. **Target resolution — the operation's target decides the forge, not the checkout.**
    In order:
-   1. An explicit change-request **URL** or `owner/repo` (or `group/subgroup/repo`) given to the
-      skill determines **both the forge and the repository** for that operation. `watch-pr` and
-      `merge-pr` already accept URLs for other repos; a bare `<n>` must never be resolved against
-      the current checkout when a URL/repo was supplied.
+   1. An explicit change-request **URL** (which carries a host) determines **both the forge and
+      the repository** for that operation. A bare `owner/repo` or `group/subgroup/repo` carries
+      **no provider information** — it may exist on GitHub or GitLab — so it overrides **only the
+      repository**; the provider then comes from step 2 (config or the current checkout's host),
+      and if neither can say, **ask**. `watch-pr` and `merge-pr` already accept URLs and repos
+      other than the checkout; a bare `<n>` must never be resolved against the current checkout
+      when a URL or repo was supplied.
    2. Otherwise the current checkout: `.claude/webdev.json` `forge` (`"github"` | `"gitlab"`),
       else the `origin` host — `github.com` → github, `gitlab.com` → gitlab.
    3. Self-hosted hosts: `forgeHosts` maps host → provider, e.g.
@@ -57,24 +60,25 @@ The inventory below is the union of every `gh` call the ten skills make today. A
 | Verb | GitHub (`gh`) | GitLab (`glab`) | Verified |
 |---|---|---|---|
 | `pr-view <t>` | `gh pr view --json …` | `glab mr view <n> -F json` (`--jq` also available) | flags ✓ / live ✗ |
-| `pr-detail <t>` | `gh pr view --json title,body,mergedAt,mergedBy,additions,deletions,files,comments,reviews` | `glab mr view <n> -F json` + `glab mr view <n> --comments -F json` | flags ✓ / live ✗ |
+| `pr-detail <t>` | `gh pr view --json title,body,mergedAt,mergedBy,additions,deletions,files,comments,reviews` | `glab mr view <n> -F json` + `glab mr view <n> --comments -F json` + approvals: `glab mr approvers <n> -F json` and `glab api projects/:id/merge_requests/<iid>/approval_state` (see "reviews[] normalization") | flags ✓ / live ✗ |
 | `pr-diff <t>` | `gh pr diff` | `glab mr diff <n> --raw` | flags ✓ / live ✗ |
 | `pr-list` (`--state`, `--head`, `--base`, `--limit`) | `gh pr list --state … --head … --base …` | `glab mr list [--all\|--merged\|--closed] -s <source> -t <target> -F json` (bare `mr list` is **open-only**) | flags ✓ / live ✗ |
 | `pr-create` | `gh pr create --base --title --body` | `glab mr create --target-branch --title --description` (or `--description-file`), `--draft` | flags ✓ / live ✗ |
 | `pr-edit <t>` | `gh pr edit --body …` | `glab mr update <n> --description-file …` (also `--title`, `--draft`/`--ready`) | flags ✓ / live ✗ |
 | `pr-checkout <t>` | `gh pr checkout` | `glab mr checkout <n>` (`-b`, `-u/--set-upstream-to`) | flags ✓ / live ✗ |
-| `pr-checks <t>` | `gh pr checks --json` | `glab ci get --merge-request <iid> -F json`; `glab ci status -F json` | flags ✓ / live ✗ |
-| `pr-update-branch <t>` | `gh pr update-branch` | `glab mr rebase <n>` — rebase, **not** merge-base-into-head; semantics differ | flags ✓ / live ✗ |
+| `pr-checks <t>` | `gh pr checks --json` (run id parsed from the check `link`) | `glab ci get --merge-request <iid> -F json` (pipeline + jobs); `glab ci status -F json` is branch-scoped | flags ✓ / live ✗ |
+| `pr-update-branch <t> --strategy <merge\|rebase>` | `gh pr update-branch` (merge, the default) / `gh pr update-branch --rebase` | `rebase` → `glab mr rebase <n>`; **`merge` → unsupported**: no merge-base-into-head option found in `glab mr update`/`rebase` help, so the adapter reports `unsupported` and the skill falls back to a local `git merge` + push or asks | flags ✓ / live ✗ |
 | `pr-merge <t> --method <squash\|merge\|rebase> --delete-branch <bool> --expect-sha <sha> --auto <bool>` | `gh pr merge --squash\|--merge\|--rebase [--delete-branch] --match-head-commit <sha> [--auto]` | `glab mr merge <n> [--squash\|--rebase] [--remove-source-branch] --sha <sha> --auto-merge=<bool> --yes` | flags ✓ / live ✗ |
 | `repo-view` (nameWithOwner, default branch, allowed merge methods) | `gh repo view --json nameWithOwner,defaultBranchRef,squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed` | `glab repo view -F json`; merge policy via `glab api projects/:id` (`merge_method`, `squash_option` — field names from docs, not observed) | flags ✓ / live ✗ |
 | `branch-protection <branch>` | `gh api repos/<o>/<r>/branches/<b>/protection` | `glab api projects/:id/protected_branches` (endpoint from docs, not observed) | endpoint ✗ / live ✗ |
 | `comments-list <t>` | `gh api --paginate …/pulls/<n>/comments` + `…/issues/<n>/comments` | `glab mr note list <n>` (marked EXPERIMENTAL) or `glab mr view <n> --comments --unresolved -F json`; raw fallback `glab api --paginate --output ndjson projects/:id/merge_requests/:iid/discussions` | flags ✓ / live ✗ |
-| `comment-reply` | `gh api …/comments/<id>/replies` | `glab mr note create <n> --reply <discussion-id> -m …` | flags ✓ / live ✗ |
+| `comment-reply` (reply **inside a thread**) | `gh api …/pulls/<n>/comments/<id>/replies` | `glab mr note create <n> --reply <discussion-id> -m …` | flags ✓ / live ✗ |
+| `pr-comment <t>` (new **top-level** comment, not a thread reply — `review-pr`'s general reply) | `gh pr comment <n> -b …` / `gh api …/issues/<n>/comments` | `glab mr note create <n> -m … --resolvable=false` (`--resolvable=false` cannot combine with `--reply`) | flags ✓ / live ✗ |
 | `thread-resolve` | GraphQL `resolveReviewThread` | `glab mr note resolve <discussion-id> <n>` (and `reopen`) | flags ✓ / live ✗ |
 | `ci-runs` (`--commit`, `--branch`, `--workflow`) | `gh run list --commit … --branch … --workflow …` | `glab ci list` (filters differ; "workflow" has no direct analogue) | flags ✓ / live ✗ |
-| `ci-logs <job>` | `gh run view --log-failed` | `glab ci trace <job-id\|name>` — **no `--failed` equivalent**: list failed jobs first (`glab ci get -F json` / `--status failed`), then trace each | flags ✓ / live ✗ |
-| `ci-rerun` | `gh run rerun --failed` | `glab ci retry <job-id\|name>` — retries **one job**, not all failed jobs | flags ✓ / live ✗ |
-| `ci-watch` | `gh run watch --exit-status` | `glab ci status --wait` (JSON output is incompatible with `--live`/`--wait`); exit-code behavior unknown | flags ✓ / live ✗ |
+| `ci-logs --run <id> --job <id>` | `gh run view --log-failed` | `glab ci trace <job-id\|name> -p <pipeline-id>` — **no `--failed` equivalent**: list failed jobs first (`glab ci get -F json` / `--status failed`), then trace each | flags ✓ / live ✗ |
+| `ci-rerun --run <id> [--job <id>]` | `gh run rerun <run-id> --failed` | `glab ci retry <job-id\|name> -p <pipeline-id>` — retries **one job**, not all failed jobs; loop over failed job ids | flags ✓ / live ✗ |
+| `ci-watch --run <id>` | `gh run watch <run-id> --exit-status` | **`glab ci status` has no `--pipeline-id`** (branch-scoped only, so it can watch a newer pipeline than the one under triage); to watch one exact pipeline, poll `glab ci get -p <pipeline-id> -F json`. `ci status --wait` is acceptable only when the branch has a single pipeline; its exit-code behavior is unknown | flags ✓ / live ✗ |
 | `issue-view <n>` | `gh issue view` | `glab issue view <n> -F json` | flags ✓ / live ✗ |
 | `whoami` | `gh api user --jq .login` | `glab api user` (no dedicated command found) | flags ✓ / live ✗ |
 
@@ -108,9 +112,25 @@ Two verbs, split by cost. Fields are the union of what current consumers read (`
 - **`pr-view`** (cheap, gating): `number, url, title, state, isDraft, baseRef, headRef, headSha,
   isCrossRepository, mergeState` (normalized enum — see below) `, mergeStateRaw` (the forge's own
   value: GitHub `mergeStateStatus`, GitLab `detailed_merge_status`) `, mergeable, reviewState,
-  checks[{name,state,link}]`.
+  checks[{name,state,link,runId,jobId}]`. `runId`/`jobId` (GitHub Actions run/job; GitLab
+  pipeline/job) are **stable identifiers** that `ci-logs`, `ci-rerun`, and `ci-watch` require, so
+  `fix-ci` acts on the exact execution it triaged and never on a newer or unrelated one.
 - **`pr-detail`** (heavier, review): everything above plus `body, mergedAt, mergedBy, additions,
   deletions, files[], comments[], reviews[]`.
+
+**Identifiers flow between verbs.** Any verb whose output another verb consumes returns the ID that
+verb needs: `comments-list` returns `{commentId, threadId, isResolved, isOutdated, body, path, line}`
+(GitLab: `threadId` = discussion id) for `comment-reply`/`thread-resolve`; `pr-checks` returns the
+run/job ids above.
+
+### `reviews[]` normalization (in `pr-detail`)
+
+`reviews[{user, state: approved|changes_requested|commented, commitSha?, submittedAt, body}]` plus
+`approvals{required, given, coversHead}`. GitHub: from `reviews` (per-review state and commit).
+GitLab has no per-review commit and no comment-review "state": build `approved` entries from
+`approvers`/`approval_state` (`approved_by`, rule counts), treat discussion notes as `commented`,
+and derive `coversHead` from the project's "remove approvals on new commits" setting (unverified).
+`changes_requested` has no confirmed GitLab source — leave it unset rather than guess.
 
 Normalized `mergeState`: `clean | blocked | behind | conflicting | unstable | unknown`. Each
 forge's raw value maps onto it in one table per forge; `merge-pr` gates on the normalized value
@@ -153,6 +173,9 @@ but still reads `mergeStateRaw` for forge-specific edge cases (e.g. GitHub `HAS_
 
 - `pr-create` / `pr-edit`: `glab mr create --draft …`, then `glab mr update <n> --description-file …`
 - `pr-checkout` incl. a fork MR and the resulting push remote / upstream
+- `pr-comment`: `glab mr note create <n> -m … --resolvable=false` — confirm it is a top-level, non-resolvable note
+- `pr-update-branch`: `glab mr rebase` on a scratch MR; confirm there is no merge-style alternative
+- `ci-watch`/`ci-logs` on a specific pipeline while a newer pipeline exists on the branch
 - `comment-reply` and `thread-resolve`: `glab mr note create --reply …`, `glab mr note resolve …`
 - `ci-rerun`: `glab ci retry <job>` on a failed job; confirm it retries only that job
 - `pr-merge`: with a **wrong** `--sha` (expect refusal + exit code), with `--auto-merge=false`
