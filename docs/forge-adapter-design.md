@@ -13,6 +13,10 @@ specific package manager.
 > reply, resolve, retry, merge, `--wait` exit codes) can't be checked read-only — see
 > "Scratch-project probes". `gh` rows reflect what the skills already use.
 
+> **Editing this doc?** Run `bash evals/forge/check-design.sh` first (CI runs it too). It checks the things
+> review kept finding: every verb has an output contract, every enum is defined, every `gh` call in
+> the skills maps to a verb, paginated endpoints paginate, every row carries a verification tag.
+
 ## Problem
 
 `gh` is hardcoded in 10 of 19 skills (~100 calls): `merge-pr`, `review-pr`, `watch-pr`, `fix-ci`,
@@ -72,10 +76,10 @@ The inventory below is the union of every `gh` call the ten skills make today. A
 | `pr-create` | `gh pr create --base --title --body` | `glab mr create --target-branch --title --description` (or `--description-file`), `--draft` | flags ✓ / live ✗ |
 | `pr-edit <t>` | `gh pr edit --body …` | `glab mr update <n> --description-file …` (also `--title`, `--draft`/`--ready`) | flags ✓ / live ✗ |
 | `pr-checkout <t>` | `gh pr checkout` | `glab mr checkout <n>` (`-b`, `-u/--set-upstream-to`) | flags ✓ / live ✗ |
-| `pr-checks <t>` | `gh pr checks --json` (run id parsed from the check `link`) | `glab ci get --merge-request <iid> -F json` (pipeline + jobs); `glab ci status -F json` is branch-scoped | flags ✓ / live ✗ |
+| `pr-checks <t>` | `gh pr checks --json name,bucket,state,link,workflow` (`bucket` verified: `pass\|fail\|pending\|skipping\|cancel`; run id parsed from `link`) | `glab ci get --merge-request <iid> -F json` (pipeline + jobs); `glab ci status -F json` is branch-scoped | flags ✓ / live ✗ |
 | `pr-update-branch <t> --strategy <merge\|rebase>` | `gh pr update-branch` (merge, the default) / `gh pr update-branch --rebase` | `rebase` → `glab mr rebase <n>`; **`merge` → unsupported**: no merge-base-into-head option found in `glab mr update`/`rebase` help, so the adapter reports `unsupported` and the skill falls back to a local `git merge` + push or asks | flags ✓ / live ✗ |
 | `pr-merge <t> (--method <squash\|merge\|rebase> \| --queue) --delete-branch <bool> --expect-sha <sha> --auto <bool> [--subject <s>] [--body <b>]` | `gh pr merge --squash\|--merge\|--rebase [--delete-branch] --match-head-commit <sha> [--auto] [--subject <s>] [--body <b>]`; **`--queue`** omits every strategy flag but keeps `--match-head-commit` (the queue owns the method) | `glab mr merge <n> [--squash\|--rebase] [--remove-source-branch] --sha <sha> --auto-merge=<bool> --yes`; squash subject → `--squash-message <s>`, merge-commit message → `-m/--message <s>`; `--queue` → merge-train analogue via `--auto-merge=true` (whether the method flags are then ignored is unverified) | flags ✓ / live ✗ |
-| `repo-view` (nameWithOwner, default branch, allowed merge methods) | `gh repo view --json nameWithOwner,defaultBranchRef,squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed` | `glab repo view -F json`; merge policy via `glab api projects/:id` (`merge_method`, `squash_option` — field names from docs, not observed) | flags ✓ / live ✗ |
+| `repo-view` (nameWithOwner, default branch, allowed merge methods) | `gh repo view --json nameWithOwner,defaultBranchRef,squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed` | `glab repo view -F json`; merge policy via `glab api projects/:id` (`merge_method`, `squash_option` — field names from docs, not observed). GitLab `allowedMergeMethods[]` is **derived**: `merge_method` `merge → [merge]`, `rebase_merge → [merge, rebase]`, `ff → [rebase]` (semi-linear/fast-forward histories), plus `squash` unless `squash_option` is `never`; an unrecognized value → the list is omitted and `merge-pr` asks | flags ✓ / live ✗ |
 | `branch-protection <branch>` → `{requiresLinearHistory, requiresMergeQueue (true\|false\|unknown), requiredChecks[], sources[]}` | **both** legacy protection `gh api repos/<o>/<r>/branches/<b>/protection` **and** rulesets `gh api repos/<o>/<r>/rules/branches/<b>` (active repo + org rulesets that apply to the branch, e.g. a `required_linear_history` rule); a branch with only rulesets has no legacy protection, so merge both into one result and record which `sources[]` produced each flag | GitHub rules endpoint ✓ (verified: returns `[]` with none) / GitLab: `glab api projects/:id/protected_branches` + project `merge_method` (`ff` ⇒ linear history). **`requiresMergeQueue` on GitLab** comes from the project's `merge_trains_enabled` (from docs, not observed; the probe checks it is present): `true` ⇒ `true`; field present and false ⇒ `false`; field **absent** (e.g. merge trains unavailable on this tier/version) ⇒ **`unknown`, never `false`**. GitHub: a `merge_queue` rule in the rulesets result (rule type from docs, not observed). `merge-pr` asks before choosing `--method` vs `--queue` when the value is `unknown` — from docs, not observed; live ✗ |
 | `comments-list <t>` → items per "`comments-list` item shape" | REST `gh api --paginate …/pulls/<n>/comments` (inline) + `…/issues/<n>/comments` (top-level), **plus the GraphQL `reviewThreads` query** (paginated; `nodes{id isResolved comments{nodes{databaseId}}}`) to attach `threadId`/`isResolved` by matching each thread's comment `databaseId` — REST exposes neither | `glab mr note list <n>` (marked EXPERIMENTAL) or `glab mr view <n> --comments --unresolved -F json`; raw fallback `glab api --paginate --output ndjson projects/:id/merge_requests/:iid/discussions` | flags ✓ / live ✗ |
 | `comment-reply` (reply **inside a thread**) | `gh api …/pulls/<n>/comments/<id>/replies` | `glab mr note create <n> --reply <discussion-id> -m …` | flags ✓ / live ✗ |
@@ -83,11 +87,11 @@ The inventory below is the union of every `gh` call the ten skills make today. A
 | `thread-resolve` | GraphQL `resolveReviewThread` | `glab mr note resolve <discussion-id> <n>` (and `reopen`) | flags ✓ / live ✗ |
 | `ci-runs` (`--commit`, `--branch`, `--workflow`) → items per "`ci-runs` item shape" | `gh run list --commit … --branch … --workflow …` | `glab ci list --sha <sha> --ref <branch> --status <s> -F json` ("workflow" has no direct analogue) | flags ✓ / live ✗ |
 | `commit-checks <sha>` (external/status checks **not** visible to `ci-runs`, e.g. CircleCI/Buildkite; used by `fix-ci` on a branch without a PR) → `[{name,state,link,source}]` | `gh api --paginate --slurp repos/<o>/<r>/commits/<sha>/status` (`statuses[]`) **and** `… /commits/<sha>/check-runs` (`check_runs[]`) — both endpoints and `--slurp` verified; **must paginate and concatenate every page** (a bare `gh api` returns only the first 30 items, so a failing external check on page 2 would be missed and `fix-ci` would conclude nothing failed) | `glab api --paginate --output ndjson projects/:id/repository/commits/<sha>/statuses` (a branch/tag name is also accepted per docs) — endpoint from docs, not observed; pipeline jobs also come from `glab ci get` | GitHub ✓ / GitLab endpoint ✗, live ✗ |
-| `ci-logs --run <id> --job <id>` | `gh run view --log-failed` | `glab ci trace <job-id\|name> -p <pipeline-id>` — **no `--failed` equivalent**: list failed jobs first (`glab ci get -F json` / `--status failed`), then trace each | flags ✓ / live ✗ |
+| `ci-logs --run <id> [--job <id>]` — with `--job` omitted the adapter **discovers the failed jobs of that run itself** and returns one log per job | `gh run view <run-id> --log-failed` (already failure-scoped); with `--job`, `gh run view --job <id> --log` | `glab ci get -p <pipeline-id> --status failed -F json` to list failed job ids, then `glab ci trace <job-id> -p <pipeline-id>` for each (**no `--failed` equivalent** in `ci trace`) | flags ✓ / live ✗ |
 | `ci-rerun --run <id> [--job <id>]` | `gh run rerun <run-id> --failed` | `glab ci retry <job-id\|name> -p <pipeline-id>` — retries **one job**, not all failed jobs; loop over failed job ids | flags ✓ / live ✗ |
 | `ci-watch --run <id>` | `gh run watch <run-id> --exit-status` | **`glab ci status` has no `--pipeline-id`** (branch-scoped only, so it can watch a newer pipeline than the one under triage); to watch one exact pipeline, poll `glab ci get -p <pipeline-id> -F json`. `ci status --wait` is acceptable only when the branch has a single pipeline; its exit-code behavior is unknown | flags ✓ / live ✗ |
 | `issue-view <t>` → items per "`issue-view` shape" | `gh issue view --json number,title,body,state,url,labels` (fields verified) | `glab issue view <n> -F json` | flags ✓ / live ✗ |
-| `whoami` | `gh api user --jq .login` | `glab api user` (no dedicated command found) | flags ✓ / live ✗ |
+| `whoami` → login string (same shape as a comment's `user`) | `gh api user --jq .login` | `glab api user --jq .username` (no dedicated command found) | flags ✓ / live ✗ |
 
 `pr-merge` takes the **method** and the **delete-source decision** from the caller: `merge-pr`
 chooses among squash/merge/rebase from config and repo policy, and deliberately omits branch
@@ -156,28 +160,95 @@ Two verbs, split by cost. Fields are the union of what current consumers read (`
   `user`/`createdAt` from each note's author/`created_at`.
 
 **Identifiers flow between verbs.** Any verb whose output another verb consumes returns the ID that
-verb needs: `comments-list` returns `{commentId, threadId, isResolved, isOutdated, body, path, line}`
-(GitLab: `threadId` = discussion id) for `comment-reply`/`thread-resolve`; `pr-checks` returns the
-run/job ids above.
+verb needs: `comments-list` returns the full item shape above (incl. `threadId`) for
+`comment-reply`/`thread-resolve`; `pr-checks` and `ci-runs` return the run/job ids above.
+
+### Normalized enums
+
+Every enum used by a shape is defined here, with both mappings. **Rule: an unrecognized native
+value maps to `unknown` (or the enum's neutral member), never to a passing/terminal one** — a
+provider adding a state must never turn a gate green. All GitLab value sets below are from docs,
+not observed; GitHub sets are verified where noted.
+
+- **`state`** (change request): `open | merged | closed | unknown`. GitHub `OPEN|MERGED|CLOSED`
+  (`OPEN` observed on `gh pr view --json state`); GitLab `opened → open`, `merged → merged`,
+  `closed → closed`, `locked → open` (a merge is in progress). `watch-pr` treats `merged` and
+  `closed` as terminal, so the lowercase/uppercase difference must never leak through.
+- **`checks[].state`**: `pass | pending | fail | skipped | cancelled | action_required | unknown`.
+  GitHub: from `gh pr checks --json bucket` (`pass→pass`, `fail→fail`, `pending→pending`,
+  `skipping→skipped`, `cancel→cancelled`; `bucket` verified, `pass` observed); `action_required`
+  is not a bucket, so it comes from the run's conclusion (`ci-runs`) when needed. GitLab job or
+  pipeline status: `created|pending|preparing|waiting_for_resource|scheduled|running → pending`,
+  `success → pass`, `failed → fail`, `canceled → cancelled`, `skipped → skipped`,
+  `manual → action_required`, anything else → `unknown`.
+- **`mergeable`**: `true | false | unknown`. GitHub `MERGEABLE → true`, `CONFLICTING → false`,
+  `UNKNOWN → unknown` (`MERGEABLE` observed). GitLab: `has_conflicts=false` and a settled
+  `detailed_merge_status` → `true`; `has_conflicts=true` → `false`; `checking|unchecked` → `unknown`.
+- **`mergeState`**: `clean | blocked | behind | conflicting | unstable | unknown`. GitHub
+  `mergeStateStatus`: `CLEAN → clean`, `BLOCKED|DRAFT → blocked`, `BEHIND → behind`,
+  `DIRTY → conflicting`, `UNSTABLE → unstable`, `HAS_HOOKS → clean` (raw kept in `mergeStateRaw`),
+  `UNKNOWN → unknown` (`CLEAN` observed). GitLab `detailed_merge_status`: `mergeable → clean`,
+  `need_rebase → behind`, `conflict → conflicting`, `ci_still_running → unstable`,
+  `ci_must_pass|not_approved|discussions_not_resolved|draft_status|blocked_status|requested_changes|external_status_checks → blocked`,
+  `checking|unchecked → unknown`. `merge-pr` gates on `mergeState` and reads `mergeStateRaw` for
+  forge-specific edge cases.
+- **`reviewState`**: `approved | changes_requested | review_required | none | unknown`. GitHub
+  `reviewDecision` (`APPROVED`, `CHANGES_REQUESTED`, `REVIEW_REQUIRED`; empty string `→ none`, observed
+  on this repo). GitLab: derived from `approval_state` — all rules satisfied → `approved`, any unmet →
+  `review_required`, no rules → `none`; never `changes_requested` (no confirmed source).
+- **`user`**: a **login string** everywhere it appears (`comments-list`, `reviews[]`, `whoami`):
+  GitHub `.login`, GitLab `.username` — so `review-pr` can compare `whoami` to a comment's `user`.
+
+### Output contracts (every verb)
+
+Every verb's return value, so no consumer has to guess. Shapes are defined above; the rest are
+short. `scripts/forge` validates output against these before printing; failures are
+`{"error": {"code", "message", "raw"}}` with the forge's message preserved in `raw`.
+
+| Verb | Returns |
+|---|---|
+| `pr-view` | the `pr-view` shape |
+| `pr-detail` | `pr-view` + the `pr-detail` fields |
+| `pr-diff` | raw unified diff text |
+| `pr-list` | `[` `pr-list` item `]` |
+| `pr-create` | `{number, url}` |
+| `pr-edit` | `{number, url}` |
+| `pr-checkout` | `{localBranch, pushRemote, isCrossRepository}` (what `commit`/`review-pr` need to push a fork PR correctly) |
+| `pr-checks` | `[{name, state, link, runId, jobId}]` (`state` per enums) |
+| `pr-update-branch` | `{updated: true}` or `{updated: false, reason: "unsupported"\|"conflict"\|…}` |
+| `pr-merge` | `{result: "merged"\|"queued"\|"refused", mergeCommitSha?, reason?}` — `queued` for a merge queue/train, `refused` for a wrong `--expect-sha` or failed gate |
+| `repo-view` | `{host, nameWithOwner, defaultBranch, allowedMergeMethods[], mergeMethod?}` (`mergeMethod` only where the forge has a project-level one) |
+| `branch-protection` | `{requiresLinearHistory, requiresMergeQueue, requiredChecks[], sources[]}` |
+| `comments-list` | `[` `comments-list` item `]` |
+| `comment-reply` | `{commentId, threadId, url}` |
+| `pr-comment` | `{commentId, url}` |
+| `thread-resolve` | `{threadId, isResolved}` |
+| `ci-runs` | `[` `ci-runs` item `]` |
+| `commit-checks` | `[{name, state, link, source: "status"\|"check-run"\|"pipeline-job"}]` (`state` per enums; all pages concatenated) |
+| `ci-logs` | `[{jobId, name, log}]` |
+| `ci-rerun` | `{runId, jobIds[]}` (the jobs actually restarted) |
+| `ci-watch` | `{status, conclusion}` (the `ci-runs` enums) once terminal |
+| `issue-view` | the `issue-view` shape |
+| `whoami` | a login string |
 
 ### `reviews[]` normalization (in `pr-detail`)
 
 `reviews[{user, state: approved|changes_requested|commented, commitSha?, submittedAt, body}]` plus
-`approvals{required, given, coversHead}` where **`coversHead` is tri-state: `true | false | unknown`**.
+`approvals{required, given, resetsOnPush, coversHead}` where **`coversHead` is tri-state: `true | false | unknown`**.
 
 - GitHub: from `reviews` (per-review state and commit) → `true`/`false`.
 - GitLab has no per-review commit and no comment-review "state". Build `approved` entries from
   `approvers`/`approval_state` (`approved_by`, rule counts) and treat discussion notes as `commented`.
-  `coversHead` is `true` **only when** the project removes approvals on new commits (any surviving
+  `resetsOnPush` (`true|false|unknown`) is read from the project's approval settings —
+  `glab api projects/:id/approvals` → `reset_approvals_on_push` (endpoint and field from docs, not
+  observed; may need Maintainer rights, so `unknown` when the call is refused; the probe checks it).
+  `coversHead` is `true` **only when** `resetsOnPush` is `true` (any surviving
   approval then necessarily post-dates the current head). When that setting is off, the setting only
   says approvals persist — it cannot say whether one was submitted before or after the current head —
-  so `coversHead` is **`unknown`**, never derived. `merge-pr` treats `unknown` like `false`: stop and
+  so `coversHead` is **`unknown`** (also when `resetsOnPush` itself is `unknown`), never derived. `merge-pr` treats `unknown` like `false`: stop and
   ask, unless another verified source ties the approval to the head.
 - `changes_requested` has no confirmed GitLab source — leave it unset rather than guess.
 
-Normalized `mergeState`: `clean | blocked | behind | conflicting | unstable | unknown`. Each
-forge's raw value maps onto it in one table per forge; `merge-pr` gates on the normalized value
-but still reads `mergeStateRaw` for forge-specific edge cases (e.g. GitHub `HAS_HOOKS`).
 
 ## Semantic gaps (the adapter cannot paper over these)
 

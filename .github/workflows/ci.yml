@@ -25,5 +25,8 @@ jobs:
       - name: Regression suite
         run: bash evals/detect-stack/test-cases.sh
 
+      - name: Forge design lint
+        run: bash evals/forge/check-design.sh
+
       - name: Smoke test (sample repo)
         run: bash evals/detect-stack/run-local.sh

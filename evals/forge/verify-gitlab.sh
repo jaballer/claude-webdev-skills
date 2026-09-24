@@ -122,6 +122,16 @@ for k in ["default_branch","merge_method","squash_option","only_allow_merge_if_p
           "only_allow_merge_if_all_discussions_are_resolved","remove_source_branch_after_merge","merge_trains_enabled"]:
     print(f"    {k:52}", "PRESENT" if k in d else "-")'
 run "protected branches (raw API)" glab api "projects/:id/protected_branches"; keys
+# approval-reset setting behind approvals.coversHead (may need Maintainer rights; a refusal is expected data)
+run "project approval settings (raw API)" glab api "projects/:id/approvals"; keys
+echo "  approval-reset field (presence only):"
+printf '%s' "$LAST_OUT" | python3 -c '
+import json,sys
+try:
+    d=json.load(sys.stdin)
+except Exception:
+    print("  (skipped: output was not JSON — likely refused; coversHead would be `unknown`)"); sys.exit()
+print("    reset_approvals_on_push          ", "PRESENT" if isinstance(d, dict) and "reset_approvals_on_push" in d else "-")'
 
 run "ci status (JSON, current branch)" glab ci status -F json; keys
 # `--help` exits 0 on every version, so grep for the flag instead of counting the exit code
