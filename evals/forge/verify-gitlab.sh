@@ -143,14 +143,33 @@ if not isinstance(d, dict):
     print("  (no pipelines to inspect)"); sys.exit()
 for k in ["id","iid","status","ref","sha","source","web_url","created_at","updated_at"]:
     print(f"    {k:14}", "PRESENT" if k in d else "-")'
-# same filters ci-runs relies on (--sha / --ref) must be accepted
-run "ci list --sha/--ref filters accepted" glab ci list --sha 0000000000000000000000000000000000000000 -F json --per-page 1
+# ci-runs maps --commit -> --sha and --branch -> --ref; probe each separately so a failure is attributable
+run "ci list --sha filter accepted" glab ci list --sha 0000000000000000000000000000000000000000 -F json --per-page 1
+BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+if [ -n "$BRANCH" ] && [ "$BRANCH" != HEAD ]; then
+  run "ci list --ref filter accepted" glab ci list --ref "$BRANCH" -F json --per-page 1
+  # commit-checks (GitLab): commit statuses, paginated; a branch name is accepted in place of a sha per the docs
+  run "commit statuses (paginated ndjson)" glab api "projects/:id/repository/commits/$BRANCH/statuses" --paginate --output ndjson
+  keys
+else
+  echo; echo "!! detached HEAD — skipping --ref and commit-status probes (check out a branch)"
+fi
 [ -n "$JOB" ] && run "ci trace <job>" glab ci trace "$JOB"
 
 # `glab issue list -F` is --output-format (details|ids|urls), not JSON — so use the API here.
 ISSUE="$(glab api 'projects/:id/issues?per_page=1' --jq '.[0].iid' 2>/dev/null)"
 case "$ISSUE" in ''|*[!0-9]*) echo; echo "!! no issue found — skipping issue view" ;;
-  *) run "issue view (JSON)" glab issue view "$ISSUE" -F json; keys ;; esac
+  *) run "issue view (JSON)" glab issue view "$ISSUE" -F json; keys
+     echo "  issue fields the adapter maps (presence only):"
+     printf '%s' "$LAST_OUT" | python3 -c '
+import json,sys
+try:
+    d=json.load(sys.stdin)
+except Exception:
+    print("  (skipped: output was not JSON)"); sys.exit()
+for k in ["iid","title","description","state","web_url","labels"]:
+    print(f"    {k:14}", "PRESENT" if isinstance(d, dict) and k in d else "-")'
+     ;; esac
 
 echo
 echo "--- not covered here (needs a scratch project; see design doc) ---"

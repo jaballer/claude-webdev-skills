@@ -44,9 +44,15 @@ commands and data shapes are not.
       which forge it runs (GitHub Enterprise vs self-managed GitLab), so an unmapped, unknown host
       → **ask**, don't guess.
 2. **`scripts/forge <verb> [args]`**, sibling to `resolve-command`. Prints normalized JSON. Skills
-   call verbs, never `gh`/`glab` directly. Every verb takes a **target** (`--repo <owner/repo>`
-   plus a number, or a URL) — not a bare number — and passes the repo through on every underlying
-   call (the same discipline `merge-pr`/`watch-pr` apply to `gh` today).
+   call verbs, never `gh`/`glab` directly. Every verb takes a fully resolved **target**
+   `{host, repo, number}` (or a URL, from which all three are parsed) — never a bare number or a
+   bare repo path — and the adapter passes **host and repo** on every underlying call, so a
+   self-hosted URL can't silently hit a same-named project on the CLI's default host:
+   - GitHub: `gh … --repo <host>/<owner>/<repo>` (the `[HOST/]OWNER/REPO` form — verified in
+     `gh pr view --help`) and `gh api --hostname <host>`.
+   - GitLab: `glab … -R <group/subgroup/repo or full URL>` (verified: `-R` accepts a full or Git
+     URL) and `glab api --hostname <host>`.
+   The resolved host comes from the URL, else `forgeHosts`/the checkout (see step 1).
 3. **Per-forge notes** live beside the skill that needs them
    (`skills/merge-pr/forges/gitlab.md`) for edge cases that don't fit a verb.
 4. **Vocabulary.** Prose says "PR/MR" or "change request"; `## Output` contracts keep a stable
@@ -70,17 +76,17 @@ The inventory below is the union of every `gh` call the ten skills make today. A
 | `pr-update-branch <t> --strategy <merge\|rebase>` | `gh pr update-branch` (merge, the default) / `gh pr update-branch --rebase` | `rebase` → `glab mr rebase <n>`; **`merge` → unsupported**: no merge-base-into-head option found in `glab mr update`/`rebase` help, so the adapter reports `unsupported` and the skill falls back to a local `git merge` + push or asks | flags ✓ / live ✗ |
 | `pr-merge <t> (--method <squash\|merge\|rebase> \| --queue) --delete-branch <bool> --expect-sha <sha> --auto <bool> [--subject <s>] [--body <b>]` | `gh pr merge --squash\|--merge\|--rebase [--delete-branch] --match-head-commit <sha> [--auto] [--subject <s>] [--body <b>]`; **`--queue`** omits every strategy flag but keeps `--match-head-commit` (the queue owns the method) | `glab mr merge <n> [--squash\|--rebase] [--remove-source-branch] --sha <sha> --auto-merge=<bool> --yes`; squash subject → `--squash-message <s>`, merge-commit message → `-m/--message <s>`; `--queue` → merge-train analogue via `--auto-merge=true` (whether the method flags are then ignored is unverified) | flags ✓ / live ✗ |
 | `repo-view` (nameWithOwner, default branch, allowed merge methods) | `gh repo view --json nameWithOwner,defaultBranchRef,squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed` | `glab repo view -F json`; merge policy via `glab api projects/:id` (`merge_method`, `squash_option` — field names from docs, not observed) | flags ✓ / live ✗ |
-| `branch-protection <branch>` → `{requiresLinearHistory, requiresMergeQueue, requiredChecks[], sources[]}` | **both** legacy protection `gh api repos/<o>/<r>/branches/<b>/protection` **and** rulesets `gh api repos/<o>/<r>/rules/branches/<b>` (active repo + org rulesets that apply to the branch, e.g. a `required_linear_history` rule); a branch with only rulesets has no legacy protection, so merge both into one result and record which `sources[]` produced each flag | GitHub rules endpoint ✓ (verified: returns `[]` with none) / GitLab: `glab api projects/:id/protected_branches` + project `merge_method` (`ff` ⇒ linear history) — from docs, not observed; live ✗ |
+| `branch-protection <branch>` → `{requiresLinearHistory, requiresMergeQueue (true\|false\|unknown), requiredChecks[], sources[]}` | **both** legacy protection `gh api repos/<o>/<r>/branches/<b>/protection` **and** rulesets `gh api repos/<o>/<r>/rules/branches/<b>` (active repo + org rulesets that apply to the branch, e.g. a `required_linear_history` rule); a branch with only rulesets has no legacy protection, so merge both into one result and record which `sources[]` produced each flag | GitHub rules endpoint ✓ (verified: returns `[]` with none) / GitLab: `glab api projects/:id/protected_branches` + project `merge_method` (`ff` ⇒ linear history). **`requiresMergeQueue` on GitLab** comes from the project's `merge_trains_enabled` (from docs, not observed; the probe checks it is present): `true` ⇒ `true`; field present and false ⇒ `false`; field **absent** (e.g. merge trains unavailable on this tier/version) ⇒ **`unknown`, never `false`**. GitHub: a `merge_queue` rule in the rulesets result (rule type from docs, not observed). `merge-pr` asks before choosing `--method` vs `--queue` when the value is `unknown` — from docs, not observed; live ✗ |
 | `comments-list <t>` → items per "`comments-list` item shape" | REST `gh api --paginate …/pulls/<n>/comments` (inline) + `…/issues/<n>/comments` (top-level), **plus the GraphQL `reviewThreads` query** (paginated; `nodes{id isResolved comments{nodes{databaseId}}}`) to attach `threadId`/`isResolved` by matching each thread's comment `databaseId` — REST exposes neither | `glab mr note list <n>` (marked EXPERIMENTAL) or `glab mr view <n> --comments --unresolved -F json`; raw fallback `glab api --paginate --output ndjson projects/:id/merge_requests/:iid/discussions` | flags ✓ / live ✗ |
 | `comment-reply` (reply **inside a thread**) | `gh api …/pulls/<n>/comments/<id>/replies` | `glab mr note create <n> --reply <discussion-id> -m …` | flags ✓ / live ✗ |
 | `pr-comment <t>` (new **top-level** comment, not a thread reply — `review-pr`'s general reply) | `gh pr comment <n> -b …` / `gh api …/issues/<n>/comments` | `glab mr note create <n> -m … --resolvable=false` (`--resolvable=false` cannot combine with `--reply`) | flags ✓ / live ✗ |
 | `thread-resolve` | GraphQL `resolveReviewThread` | `glab mr note resolve <discussion-id> <n>` (and `reopen`) | flags ✓ / live ✗ |
-| `ci-runs` (`--commit`, `--branch`, `--workflow`) | `gh run list --commit … --branch … --workflow …` | `glab ci list --sha <sha> --ref <branch> --status <s> -F json` ("workflow" has no direct analogue) | flags ✓ / live ✗ |
-| `commit-checks <sha>` (external/status checks **not** visible to `ci-runs`, e.g. CircleCI/Buildkite; used by `fix-ci` on a branch without a PR) → `[{name,state,link,source}]` | `gh api repos/<o>/<r>/commits/<sha>/status` (`statuses[]`) **and** `…/commits/<sha>/check-runs` (both verified to exist) | `glab api projects/:id/repository/commits/<sha>/statuses` — endpoint from docs, not observed; pipeline jobs also come from `glab ci get` | GitHub ✓ / GitLab endpoint ✗, live ✗ |
+| `ci-runs` (`--commit`, `--branch`, `--workflow`) → items per "`ci-runs` item shape" | `gh run list --commit … --branch … --workflow …` | `glab ci list --sha <sha> --ref <branch> --status <s> -F json` ("workflow" has no direct analogue) | flags ✓ / live ✗ |
+| `commit-checks <sha>` (external/status checks **not** visible to `ci-runs`, e.g. CircleCI/Buildkite; used by `fix-ci` on a branch without a PR) → `[{name,state,link,source}]` | `gh api --paginate --slurp repos/<o>/<r>/commits/<sha>/status` (`statuses[]`) **and** `… /commits/<sha>/check-runs` (`check_runs[]`) — both endpoints and `--slurp` verified; **must paginate and concatenate every page** (a bare `gh api` returns only the first 30 items, so a failing external check on page 2 would be missed and `fix-ci` would conclude nothing failed) | `glab api --paginate --output ndjson projects/:id/repository/commits/<sha>/statuses` (a branch/tag name is also accepted per docs) — endpoint from docs, not observed; pipeline jobs also come from `glab ci get` | GitHub ✓ / GitLab endpoint ✗, live ✗ |
 | `ci-logs --run <id> --job <id>` | `gh run view --log-failed` | `glab ci trace <job-id\|name> -p <pipeline-id>` — **no `--failed` equivalent**: list failed jobs first (`glab ci get -F json` / `--status failed`), then trace each | flags ✓ / live ✗ |
 | `ci-rerun --run <id> [--job <id>]` | `gh run rerun <run-id> --failed` | `glab ci retry <job-id\|name> -p <pipeline-id>` — retries **one job**, not all failed jobs; loop over failed job ids | flags ✓ / live ✗ |
 | `ci-watch --run <id>` | `gh run watch <run-id> --exit-status` | **`glab ci status` has no `--pipeline-id`** (branch-scoped only, so it can watch a newer pipeline than the one under triage); to watch one exact pipeline, poll `glab ci get -p <pipeline-id> -F json`. `ci status --wait` is acceptable only when the branch has a single pipeline; its exit-code behavior is unknown | flags ✓ / live ✗ |
-| `issue-view <n>` | `gh issue view` | `glab issue view <n> -F json` | flags ✓ / live ✗ |
+| `issue-view <t>` → items per "`issue-view` shape" | `gh issue view --json number,title,body,state,url,labels` (fields verified) | `glab issue view <n> -F json` | flags ✓ / live ✗ |
 | `whoami` | `gh api user --jq .login` | `glab api user` (no dedicated command found) | flags ✓ / live ✗ |
 
 `pr-merge` takes the **method** and the **delete-source decision** from the caller: `merge-pr`
@@ -129,6 +135,20 @@ Two verbs, split by cost. Fields are the union of what current consumers read (`
   `qa-review`, `merge-pr` read): `number, url, title, state, baseRef, headRef, headSha, mergedAt,
   mergeCommitSha`. GitHub: `number,url,title,state,baseRefName,headRefName,headRefOid,mergedAt,mergeCommit`.
   GitLab: `iid,web_url,title,state,target_branch,source_branch,sha,merged_at,merge_commit_sha`.
+- **`ci-runs` item shape**: `runId, name, status: queued|in_progress|completed,
+  conclusion: success|failure|cancelled|skipped|timed_out|action_required|null, branch, headSha,
+  trigger, url, createdAt` — what `fix-ci` needs to select, wait on, and later re-check the *same*
+  execution, and what `merge-pr` needs to attribute post-merge runs. GitHub: `databaseId,
+  workflowName, status, conclusion, headBranch, headSha, event, url, createdAt` (all verified
+  `gh run list --json` fields). GitLab pipeline: `id, name?, status, ref, sha, source, web_url,
+  created_at`; GitLab has one `status` field, so it splits into `status`/`conclusion`:
+  `created|pending|preparing|waiting_for_resource` → `queued`, `running` → `in_progress`,
+  `success|failed|canceled|skipped` → `completed` + `success|failure|cancelled|skipped`,
+  `manual` → `completed` + `action_required` (mapping from docs, not observed; a pipeline has no
+  "workflow", so `name` is the pipeline name when present, else null).
+- **`issue-view` shape**: `number, title, body, state: open|closed, url, labels[]` — what `fix-bug`
+  reads to classify a report before branching. GitLab: `iid → number`, `description → body`,
+  `state` `opened → open`, `web_url → url`.
 - **`comments-list` item shape**: `commentId, threadId, kind: inline|top-level, isResolved,
   isOutdated, user, createdAt, body, path, line`. `user` and `createdAt` are required — `review-pr`'s
   recheck filters to comments created after its push and not authored by itself; without them a
@@ -179,13 +199,19 @@ but still reads `mergeStateRaw` for forge-specific edge cases (e.g. GitHub `HAS_
    the write-side verbs.
 2. Add `scripts/forge` + `forge`/`forgeHosts` keys (update `examples/webdev.json`, README key table,
    `detect-stack` Output contract — CONTRIBUTING says these stay in sync).
-3. **Phase 1 (read-mostly, low risk):** `open-pr` (`pr-list`, `repo-view`, `pr-edit`, `pr-create`),
+3. **Phase 1 (read-mostly, low risk):** `open-pr` (`pr-list`, `repo-view`, `pr-create`, `pr-edit`),
    `sync-main` (`pr-list`), `qa-review` (`pr-list`), `post-merge-review` (`pr-detail`, `pr-diff`,
    `pr-list`), `fix-bug` (`issue-view`).
-4. **Phase 2 (mutating / fork-aware):** `commit` (fork push-remote logic via `pr-view`/`pr-checkout`,
-   then `open-pr`), `fix-ci` (`pr-checks`, `ci-runs`, `commit-checks`, `ci-logs`, `ci-rerun`, `ci-watch`),
-   `review-pr` (`comments-list`, `comment-reply`, `pr-comment`, `thread-resolve`, `whoami`), `watch-pr`,
-   `merge-pr` (`pr-view`, `repo-view`, `branch-protection`, `pr-merge`, `pr-update-branch`, `ci-runs`).
+4. **Phase 2 (mutating / fork-aware)** — verb lists come from a per-skill grep of `gh (pr|run|issue|repo|api)`
+   calls; re-run it when adding a skill (`sync-main`'s `gh pr close` is a "never run" rule, not a call):
+   - `commit`: `pr-view`, `pr-checkout` (fork push-remote logic), then `open-pr`.
+   - `fix-ci`: `pr-view`, `pr-checkout`, `pr-checks`, `ci-runs`, `commit-checks`, `ci-logs`,
+     `ci-rerun`, `ci-watch`.
+   - `review-pr`: `pr-view`, `pr-checkout`, `pr-checks`, `ci-runs`, `ci-logs`, `comments-list`,
+     `comment-reply`, `pr-comment`, `thread-resolve`, `whoami`.
+   - `watch-pr`: `pr-view`, `pr-detail` (reviews/approvals), `repo-view`.
+   - `merge-pr`: `pr-view`, `pr-detail`, `pr-checks`, `pr-list` (stacked PRs via `--base`),
+     `repo-view`, `branch-protection`, `pr-merge`, `pr-update-branch`, `ci-runs`.
 5. All ten skills from "Problem" are covered; a skill counts as migrated only when a grep for
    `\bgh\b|\bglab\b` in its `SKILL.md` finds nothing outside its per-forge notes.
 6. Fixture-based eval for `forge` (mirror `evals/detect-stack`), including a GitLab CI example.
@@ -203,7 +229,8 @@ but still reads `mergeStateRaw` for forge-specific edge cases (e.g. GitHub `HAS_
 - `ci-watch`/`ci-logs` on a specific pipeline while a newer pipeline exists on the branch
 - `comment-reply` and `thread-resolve`: `glab mr note create --reply …`, `glab mr note resolve …`
 - `pr-merge`: squash with `--squash-message` and confirm the resulting commit subject; `--auto-merge=true` on a project with merge trains — is the method flag ignored?
-- `commit-checks`: an external commit status posted to a scratch commit (`glab api … /statuses`) appears in the mapping
+- `commit-checks`: an external commit status posted to a scratch commit (`glab api … /statuses`) appears in the mapping; also a commit with more than one page (>20) of statuses returns all pages
+- `requiresMergeQueue`: a project with merge trains enabled reports `true`; one without the field reports `unknown`
 - `ci-rerun`: `glab ci retry <job>` on a failed job; confirm it retries only that job
 - `pr-merge`: with a **wrong** `--sha` (expect refusal + exit code), with `--auto-merge=false`
   vs default while a pipeline is running, and the delete-source flag
