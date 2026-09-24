@@ -16,14 +16,14 @@
 # safe to paste into the design PR. VERBOSE=1 prints raw command output for local debugging;
 # NEVER paste VERBOSE output anywhere shared.
 #
-# Exit: 2 if glab is missing or unauthenticated (nothing was verified); otherwise 0 when at
-# least one command succeeded. Data-dependent failures (e.g. no issues) are reported, not fatal.
+# Exit: 2 if glab is missing/unauthenticated, or if no project-specific probe succeeded (login
+# alone verifies nothing about the project); otherwise 0. Data-dependent failures (e.g. no issues) are reported, not fatal.
 set -u
 
 MR="${1:-}"
 JOB="${2:-}"
 VERBOSE="${VERBOSE:-0}"
-pass=0; fail=0; LAST_OUT=""; LAST_RC=0
+pass=0; fail=0; prereq=0; LAST_OUT=""; LAST_RC=0
 
 run() {  # run <label> <cmd...> — records exit code; raw output only when VERBOSE=1
   local label="$1"; shift
@@ -67,6 +67,7 @@ if [ "$LAST_RC" -ne 0 ]; then
 fi
 
 run "whoami (glab api user)" glab api user --jq .username
+prereq=$pass   # auth + whoami only prove login; project probes are counted separately below
 run "mr list --merged (JSON)" glab mr list --merged -F json --per-page 3; keys
 if [ -z "$MR" ]; then
   # bare `mr list` is open-only; --all covers merged/closed so projects with no open MR still work
@@ -88,12 +89,15 @@ for k in ["iid","web_url","state","draft","work_in_progress","title","descriptio
           "source_branch","sha","diff_refs","detailed_merge_status","merge_status","has_conflicts",
           "head_pipeline","pipeline","source_project_id","target_project_id","merged_at","merged_by",
           "changes_count","user_notes_count","blocking_discussions_resolved",
-          "merge_when_pipeline_succeeds","auto_merge_enabled","squash","should_remove_source_branch"]:
+          "merge_when_pipeline_succeeds","auto_merge_enabled","squash","should_remove_source_branch",
+          "merge_commit_sha","squash_commit_sha","author"]:
     print(f"    {k:32}", "PRESENT" if k in d else "-")
 print("  detailed_merge_status =", d.get("detailed_merge_status"))'
   run "mr view --comments --unresolved (JSON)" glab mr view "$MR" --comments --unresolved -F json; keys
   run "mr note list (EXPERIMENTAL)" glab mr note list "$MR"
   run "mr diff --raw" glab mr diff "$MR" --raw
+  echo "  derived stats (counts only — the adapter computes files/additions/deletions from this):"
+  printf '%s\n' "$LAST_OUT" | awk '/^diff --git /{f++} /^\+\+\+ |^--- /{next} /^\+/{a++} /^-/{d++} END{printf "    files=%d additions=%d deletions=%d\n", f, a, d}'
   # multi-page output is not one JSON document; ndjson is glab's documented per-item format
   run "raw discussions API (ndjson)" glab api "projects/:id/merge_requests/$MR/discussions" --paginate --output ndjson
   keys
@@ -126,7 +130,21 @@ CIHELP="$(glab ci status --help 2>&1)"
 for f in --wait --live --pipeline-id; do
   if printf '%s' "$CIHELP" | grep -q -- "$f"; then echo "  ci status $f: PRESENT"; else echo "  ci status $f: absent"; fi
 done
-run "ci list" glab ci list --per-page 3
+run "ci list (JSON)" glab ci list -F json --per-page 3; keys
+echo "  pipeline fields the adapter maps (presence only):"
+printf '%s' "$LAST_OUT" | python3 -c '
+import json,sys
+try:
+    d=json.load(sys.stdin)
+except Exception:
+    print("  (skipped: output was not JSON)"); sys.exit()
+d = d[0] if isinstance(d, list) and d else d
+if not isinstance(d, dict):
+    print("  (no pipelines to inspect)"); sys.exit()
+for k in ["id","iid","status","ref","sha","source","web_url","created_at","updated_at"]:
+    print(f"    {k:14}", "PRESENT" if k in d else "-")'
+# same filters ci-runs relies on (--sha / --ref) must be accepted
+run "ci list --sha/--ref filters accepted" glab ci list --sha 0000000000000000000000000000000000000000 -F json --per-page 1
 [ -n "$JOB" ] && run "ci trace <job>" glab ci trace "$JOB"
 
 # `glab issue list -F` is --output-format (details|ids|urls), not JSON — so use the API here.
@@ -138,5 +156,9 @@ echo
 echo "--- not covered here (needs a scratch project; see design doc) ---"
 echo "  pr-create, pr-checkout, comment-reply, thread-resolve, ci-retry, pr-merge (incl. wrong --sha refusal), ci status --wait exit code"
 echo
-echo "summary: $pass commands exited 0, $fail non-zero (non-zero is expected where no data exists)"
-[ "$pass" -gt 0 ] || exit 2
+proj=$((pass-prereq))
+echo "summary: $proj project probes exited 0 (plus $prereq prerequisites), $fail non-zero (non-zero is expected where no data exists)"
+if [ "$proj" -eq 0 ]; then
+  echo "no project-specific probe succeeded — nothing about this project was verified (wrong directory, no access, or no data)"
+  exit 2
+fi
